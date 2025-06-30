@@ -48,16 +48,16 @@ class Fieldfile:
             raise ValueError(f"Expected {self.ntotf} values, got {flat.size}.")
         self.data = flat.reshape((self.nflds, self.npoints))
 
-    def write(self, data, keep_open=False):
-        """write field data to file"""
-        if data.dtype != np.dtype("float64"):
-            raise TypeError("need float64 data")
-        data.tofile(self.f)
-        if not keep_open:
-            self.f.close()
+    def write(self, data: np.ndarray, keep_open: bool = False) -> None:
+        """Write float64 field data to file."""
+        if data.dtype != np.float64:
+            raise TypeError("Expected float64 data")
+        with open(self.fname, "ab" if keep_open else "wb") as f:
+            data.tofile(f)
 
-    def write_fields(self, fields):
-        self.write(np.vstack(the_field.flatten() for the_field in fields))
+    def write_fields(self, fields: list[np.ndarray]) -> None:
+        flat_data = np.concatenate([field.flatten() for field in fields])
+        self.write(flat_data)
 
     def __getitem__(self, fieldname):
         return self.data[self.field_index(fieldname)]
