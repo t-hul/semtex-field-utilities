@@ -1,13 +1,16 @@
-from typing import BinaryIO
+import logging
+from typing import BinaryIO, Optional
 
 import numpy as np
 
 from .geometry import Geometry
 from .header import Header
 
+logger = logging.getLogger(__name__)
+
 
 class Fieldfile:
-    def __init__(self, fname: str, mode: str, header: Header | None = None):
+    def __init__(self, fname: str, mode: str, header: Optional[Header] = None):
         if mode not in ("r", "w"):
             raise ValueError("mode must be 'r' (read) or 'w' (write)")
 
@@ -19,25 +22,35 @@ class Fieldfile:
             with open(fname, "rb") as f:
                 self.hdr = Header(Geometry())
                 self.hdr.read(f)
+                self._update_geometry_info()
                 self._read_data(f)
         elif mode == "w":
             if not header:
                 raise ValueError("Need header when writing file")
             self.hdr = header
+            self._update_geometry_info()
             with open(fname, "wb") as f:
-                f.write(str(self.header).encode("ascii"))
+                self.hdr.write(f)
                 self._f = f  # if keep_open is needed
         else:
             ValueError("Unsupported mode")
 
+    def _update_geometry_info(self) -> None:
         self.fields = self.hdr.fields
         self.geometry = self.hdr.geometry
         self.nflds = len(self.fields)
-
         self.npoints = (
             self.geometry.nr * self.geometry.ns * self.geometry.nz * self.geometry.nel
         )
         self.ntotf = self.npoints * self.nflds
+
+    def _print_geometry_info(self) -> None:
+        logger.debug("Geometry info:")
+        logger.debug(repr(self.fields))
+        logger.debug(repr(self.geometry))
+        logger.debug(f"nfields: {self.nflds}")
+        logger.debug(f"npoints: {self.npoints}")
+        logger.debug(f"ntotf: {self.ntotf}")
 
     def _read_data(self, f: BinaryIO) -> None:
         """Read float64 field data from file into a (nflds, ntot) array."""
@@ -52,7 +65,9 @@ class Fieldfile:
         """Write float64 field data to file."""
         if data.dtype != np.float64:
             raise TypeError("Expected float64 data")
-        with open(self.fname, "ab" if keep_open else "wb") as f:
+        mode = "ab" if keep_open else "r+b"
+        with open(self.fname, mode) as f:
+            f.seek(0, 2)
             data.tofile(f)
 
     def write_fields(self, fields: list[np.ndarray]) -> None:
