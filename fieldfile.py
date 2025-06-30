@@ -68,52 +68,24 @@ class Fieldfile:
     def field_index(self, name: str) -> int:
         return self.fields.index(name)
 
-    def alloc(self):
-        """allocate and return data storage"""
-        #        if not fields: fields = self.hdr.fields
-        return np.zeros((self.ntotf), dtype="float64")
+    def alloc(self) -> np.ndarray:
+        """Allocate and return a flat zero-initialized field array."""
+        return np.zeros(self.ntotf, dtype=np.float64)
 
-    # --------------------------------------------------------------------------
-    def close(self):
-        self.f.close()
+    def reshape_elementwise(self) -> np.ndarray:
+        """Reshape to (nflds, nz, nel, ns, nr) for element-wise access."""
+        if self.data is None:
+            raise RuntimeError("No data loaded")
+        return self.data.reshape(
+            (
+                self.nflds,
+                self.geometry.nz,
+                self.geometry.nel,
+                self.geometry.ns,
+                self.geometry.nr,
+            )
+        )
 
-    def is_mesh_compatible(self, mesh):
-        return mesh.geometry == self.hdr.geometry
-
-
-# ----------------------------------------------------------
-def convert():
-    """convert fieldfile to ASCII, like utility/convert.C"""
-    ff = Fieldfile("example.fld", "r")
-    ff.hdr.write(sys.stdout)
-    data = ff.read()
-
-    for i in range(ff.ntot):
-        for field in range(ff.nflds):
-            print("%g" % data[i, field])
-
-
-#        print
-
-
-def element_wise():
-    """demonstrates element-wise access
-    NB: Fieldfile.read() expects double precision (Float64) data, as is standard for
-        semtex field files. No checks done for single precision or funny byte order.
-    """
-    ff = Fieldfile("example.fld", "r")
-    data = ff.read()
-    # elmt_wise = data.reshape((ff.nr, ff.ns, ff.nel, ff.nz, ff.nflds))
-    elmt_wise = data.reshape((ff.nflds, ff.nz, ff.nel, ff.ns, ff.nr))  # works!
-    #    print data
-    #    - of nr * ns nodes
-    #    - of 11th element
-    #    - of first z-plane
-    #    - of second field (in this case, v)
-    print(elmt_wise[1, 0, 10, :, :])
-
-
-if __name__ == "__main__":
-    element_wise()
-    # convert()
-    # main()
+    def has_equal_geometry(self, other_geo: Geometry) -> bool:
+        equal, _ = self.geometry == other_geo
+        return equal
