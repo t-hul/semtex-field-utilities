@@ -7,45 +7,47 @@ from .header import Header
 
 
 class Fieldfile:
-    def __init__(self, fname, state, header=None):
+    def __init__(self, fname: str, mode: str, header: Header | None = None):
+        if mode not in ("r", "w"):
+            raise ValueError("mode must be 'r' (read) or 'w' (write)")
 
-        if state == "r":
-            self.f = open(fname, "rb")
-            self.hdr = Header(Geometry())
-            self.hdr.read(self.f)
+        self.fname = fname
+        self.mode = mode
+        self.data: np.ndarray | None = None
 
-        elif state == "w":
+        if mode == "r":
+            with open(fname, "rb") as f:
+                self.hdr = Header(Geometry())
+                self.hdr.read(f)
+                self._read_data(f)
+        elif mode == "w":
             if not header:
                 raise ValueError("Need header when writing file")
             self.hdr = header
-            self.f = open(fname, "w")
-            self.hdr.write(self.f)
+            with open(fname, "wb") as f:
+                f.write(str(self.header).encode("ascii"))
+                self._f = f  # if keep_open is needed
+        else:
+            ValueError("Unsupported mode")
 
-        # FIXME: this design sucks. Shouldnt replicate data.
-        #        Get rid of hdr?
-        self.nr = self.hdr.geometry.nr
-        self.ns = self.hdr.geometry.ns
-        self.nz = self.hdr.geometry.nz
-        self.nel = self.hdr.geometry.nel
+        self.fields = self.hdr.fields
+        self.geometry = self.hdr.geometry
+        self.nflds = len(self.fields)
 
-        self.nrns = self.hdr.geometry.nr * self.hdr.geometry.ns
-        self.nxy = self.nrns * self.hdr.geometry.nel
-        self.ntot = self.nxy * self.hdr.geometry.nz
-        self.nflds = len(self.hdr.fields)
-        self.ntotf = self.ntot * self.nflds
+        self.npoints = (
+            self.geometry.nr * self.geometry.ns * self.geometry.nz * self.geometry.nel
+        )
+        self.ntotf = self.npoints * self.nflds
 
-        self.data = None
+    def _read_data(self, f: BinaryIO) -> None:
+        """Read float64 field data from file into a (nflds, ntot) array."""
+        buf = f.read()
+        flat = np.frombuffer(buf, dtype=np.float64)
 
-        # -- create list of field variables
-        self.fields = [f for f in self.hdr.fields]
+        if flat.size != self.ntotf:
+            raise ValueError(f"Expected {self.ntotf} values, got {flat.size}.")
+        self.data = flat.reshape((self.nflds, self.npoints))
 
-    # --------------------------------------------------------------------------
-    #    def read(self):
-    #        bin = array.array('d')
-    #        bin.read(self.f, 1)
-    #        return bin[0]
-
-    # --------------------------------------------------------------------------
     def write(self, data, keep_open=False):
         """write field data to file"""
         if data.dtype != np.dtype("float64"):
