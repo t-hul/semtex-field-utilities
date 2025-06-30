@@ -23,24 +23,28 @@ class Header:
         self.session = hdr_lines[0].strip().split()[0]
         self.created = hdr_lines[1].strip().split()[0]
 
-        nr, ns, nz, nel = map(int, hdr_lines[2].strip().split())
+        nr, ns, nz, nel = map(int, hdr_lines[2].strip().split()[:4])
         self.geometry = Geometry(nr, ns, nz, nel)
 
         self.step = int(hdr_lines[3].strip().split()[0])
         self.time = float(hdr_lines[4].strip().split()[0])
-        self.dt = float(hdr_lines[5].split().strip()[0])
-        self.kinvis = float(hdr_lines[6].split().strip()[0])
-        self.beta = float(hdr_lines[7].split().strip()[0])
+        self.dt = float(hdr_lines[5].strip().split()[0])
+        self.kinvis = float(hdr_lines[6].strip().split()[0])
+        self.beta = float(hdr_lines[7].strip().split()[0])
 
-        self.fields = (
-            hdr_lines[8]
-            .strip()
-            .replace("[", "")
-            .replace("]", "")
-            .replace(",", "")
-            .split()
-        )
+        self.fields = self._extract_fields(hdr_lines[8].strip())
         self.format = hdr_lines[9].strip()
+
+    @staticmethod
+    def _extract_fields(fields_line: str) -> list[str]:
+        if fields_line.startswith("["):
+            if "]" not in fields_line:
+                raise ValueError("Closing bracket ']' of fields string not found")
+            return fields_line[1:].split("]")[0].replace(",", " ").split()
+        elif fields_line.split()[1] == "Fields":
+            return [char for char in fields_line.split()[0]]
+        else:
+            raise ValueError(f"Format of fields_line not recognized: {fields_line}")
 
     def write(self, f: BinaryIO) -> None:
         f.write(str(self).encode("ascii"))
