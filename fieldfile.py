@@ -5,18 +5,18 @@
 # development at github.com/t-hul/semtex-field-utilities
 
 import sys
+from dataclasses import dataclass
 
 # import string
 import numpy as np
 
 
-# ----------------------------------------------------------
+@dataclass
 class Geometry:
-    def __init__(self, nr=3, ns=3, nz=1, nel=1):
-        self.nr = nr
-        self.ns = ns
-        self.nz = nz
-        self.nel = nel
+    nr: int = 3
+    ns: int = 3
+    nz: int = 1
+    nel: int = 1
 
     def __str__(self):
         return "%i %i %i %i" % (self.nr, self.ns, self.nz, self.nel)
