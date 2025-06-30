@@ -7,9 +7,7 @@ The original scripts are updated to a mor modern approach.
 
 ## Installation using pip install
 To install the library plot_utils in edit mode run
-```
-pip install -e .
-```
+```pip install -e .```
 in the projects root directory.
 
 ## List of changes
@@ -19,7 +17,9 @@ in the projects root directory.
 - added pytest functionality
 
 ## Testing
-To run the tests execute `pytest` in the projects root directory.
+To run the tests execute 
+```pytest``` 
+in the projects root directory.
 Debugging output can be activated in `pytest.ini`.
 Additional data for testing can be found in `tests/data/` 
 
