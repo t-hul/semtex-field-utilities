@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import BinaryIO
 
 from .geometry import Geometry
@@ -7,7 +7,7 @@ from .geometry import Geometry
 @dataclass
 class Header:
     geometry: Geometry
-    fields: str = ""
+    fields: list[str] = field(default_factory=list)
     format: str = "binary"
     session: str = ""
     created: str = ""
@@ -32,25 +32,31 @@ class Header:
         self.kinvis = float(hdr_lines[6].split().strip()[0])
         self.beta = float(hdr_lines[7].split().strip()[0])
 
-        self.fields = hdr_lines[8].strip().replace("[", "").replace("]", "")
+        self.fields = (
+            hdr_lines[8]
+            .strip()
+            .replace("[", "")
+            .replace("]", "")
+            .replace(",", "")
+            .split()
+        )
         self.format = hdr_lines[9].strip()
 
-    def write(self, f):
-        f.write(str(self))
+    def write(self, f: BinaryIO) -> None:
+        f.write(str(self).encode("ascii"))
 
-    def __str__(self):
-        out = []
-        out.append("%-25s Session" % self.session)
-        out.append("%-25s Created" % self.created)
-        out.append(
-            "%-4i %-4i %-4i %-6i     Nr, Ns, Nz, Elements"
-            % (self.geometry.nr, self.geometry.ns, self.geometry.nz, self.geometry.nel)
-        )
-        out.append("%-25i Step" % self.step)
-        out.append("%-25g Time" % self.time)
-        out.append("%-25g Time step" % self.dt)
-        out.append("%-25g Kinvis" % self.kinvis)
-        out.append("%-25g Beta" % self.beta)
-        out.append("%-25s Fields written" % self.fields)
-        out.append("%-25s Format" % self.format)
-        return "\n".join(out) + "\n"
+    def __str__(self) -> str:
+        lines = [
+            f"{self.session:<25} Session",
+            f"{self.created:<25} Created",
+            f"{self.geometry.nr:<4} {self.geometry.ns:<4} {self.geometry.nz:<4} \
+                    {self.geometry.nel:<6}     Nr, Ns, Nz, Elements",
+            f"{self.step:<25} Step",
+            f"{self.time:<25g} Time",
+            f"{self.dt:<25g} Time step",
+            f"{self.kinvis:<25g} Kinvis",
+            f"{self.beta:<25g} Beta",
+            f"[{', '.join(self.fields)}] Fields written",
+            f"{self.format:<25} Format",
+        ]
+        return "\n".join(lines) + "\n"
