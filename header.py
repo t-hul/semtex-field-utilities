@@ -17,29 +17,23 @@ class Header:
     kinvis: float = 1.0
     beta: float = 1.0
 
-    def read(self, f):
-        hdr = []
-        for i in range(0, 9):
-            #            print(i)
-            line = f.readline().decode("ascii")
-            hdr.append(line.split())
-        hdr.append(f.readline().decode("ascii"))
+    def read(self, f: BinaryIO) -> None:
+        hdr_lines = [f.readline().decode("ascii") for _ in range(10)]
 
-        self.session = hdr[0][0]
-        self.created = hdr[1][0]
-        self.geometry = Geometry(
-            int(hdr[2][0]), int(hdr[2][1]), int(hdr[2][2]), int(hdr[2][3])
-        )
-        self.step = int(hdr[3][0])
-        self.time = float(hdr[4][0])
-        self.dt = float(hdr[5][0])
-        self.kinvis = float(hdr[6][0])
-        self.beta = float(hdr[7][0])
-        rawFields = hdr[8][0]
-        for char in "[,]":
-            rawFields = rawFields.replace(char, "")
-        self.fields = rawFields
-        self.format = hdr[9][:-1]
+        self.session = hdr_lines[0].strip().split()[0]
+        self.created = hdr_lines[1].strip().split()[0]
+
+        nr, ns, nz, nel = map(int, hdr_lines[2].strip().split())
+        self.geometry = Geometry(nr, ns, nz, nel)
+
+        self.step = int(hdr_lines[3].strip().split()[0])
+        self.time = float(hdr_lines[4].strip().split()[0])
+        self.dt = float(hdr_lines[5].split().strip()[0])
+        self.kinvis = float(hdr_lines[6].split().strip()[0])
+        self.beta = float(hdr_lines[7].split().strip()[0])
+
+        self.fields = hdr_lines[8].strip().replace("[", "").replace("]", "")
+        self.format = hdr_lines[9].strip()
 
     def write(self, f):
         f.write(str(self))
