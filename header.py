@@ -4,20 +4,18 @@ from typing import BinaryIO
 from .geometry import Geometry
 
 
+@dataclass
 class Header:
-    #    def __init__(self, nr=3, ns=3, nz=1, nel=1, geometry=None, fields="", format="binary"):
-    def __init__(self, geometry, fields="", format="binary"):
-        self.session = ""
-        self.created = ""
-        # if not geometry: geometry = Geometry(nr, ns, nz, nel)
-        self.geometry = geometry
-        self.step = 0
-        self.time = 0.0
-        self.dt = 0.0
-        self.kinvis = 1.0
-        self.beta = 1.0
-        self.fields = fields
-        self.format = format
+    geometry: Geometry
+    fields: str = ""
+    format: str = "binary"
+    session: str = ""
+    created: str = ""
+    step: int = 0
+    time: float = 0.0
+    dt: float = 0.0
+    kinvis: float = 1.0
+    beta: float = 1.0
 
     def read(self, f):
         hdr = []
