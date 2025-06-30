@@ -12,5 +12,6 @@ pip install -e .
 ```
 in the projects root directory.
 
-
+## List of changes
+- split fieldfile classes into separate files: geometry.py, header.py, fieldfile.py
 

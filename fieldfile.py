@@ -1,9 +1,3 @@
-# python classes for accessing semtex fieldfile
-# based on script by Thomas Albrecht
-# updated by Thomas Hultsch
-#
-# development at github.com/t-hul/semtex-field-utilities
-
 import sys
 from dataclasses import dataclass
 
