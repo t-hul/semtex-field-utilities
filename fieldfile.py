@@ -59,19 +59,14 @@ class Fieldfile:
         flat_data = np.concatenate([field.flatten() for field in fields])
         self.write(flat_data)
 
-    def __getitem__(self, fieldname):
-        return self.data[self.field_index(fieldname)]
+    def __getitem__(self, field_name: str) -> np.ndarray:
+        if self.data is None:
+            raise RuntimeError("No data loaded")
+        idx = self.field_index(field_name)
+        return self.data[idx]
 
-    # --------------------------------------------------------------------------
-    def read(self):
-        "read field data from file. Float64 data expected."
-        buf = self.f.read()
-        self.data = np.fromstring(buf, np.float64, count=-1).reshape(
-            self.nflds, self.ntot
-        )
-        return self.data
-        # return np.fromfile(self.f, 'd')
-        self.close()
+    def field_index(self, name: str) -> int:
+        return self.fields.index(name)
 
     def alloc(self):
         """allocate and return data storage"""
@@ -81,9 +76,6 @@ class Fieldfile:
     # --------------------------------------------------------------------------
     def close(self):
         self.f.close()
-
-    def field_index(self, needle):
-        return self.fields.index(needle)
 
     def is_mesh_compatible(self, mesh):
         return mesh.geometry == self.hdr.geometry
