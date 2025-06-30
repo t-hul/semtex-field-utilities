@@ -14,4 +14,6 @@ in the projects root directory.
 
 ## List of changes
 - split fieldfile classes into separate files: geometry.py, header.py, fieldfile.py
+- use dataclasses and type annotations
+- use fieldstring naming convention
 
