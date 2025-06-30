@@ -18,8 +18,8 @@ class Geometry:
     nz: int = 1
     nel: int = 1
 
-    def __str__(self):
-        return "%i %i %i %i" % (self.nr, self.ns, self.nz, self.nel)
+    def __str__(self) -> str:
+        return f"{self.nr} {self.ns} {self.nz} {self.nel}"
 
     def __eq__(self, other):
         is_equal = True
