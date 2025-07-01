@@ -33,3 +33,23 @@ def test_basic_fieldfile_roundtrip(tmp_path):
 
     elmt_data = ff_read.reshape_elementwise()
     assert elmt_data.shape == (2, 1, 1, 2, 2)
+
+
+def test_read_checkpoint():
+    fname = "./tests/data/koal1.1200.chk"
+
+    ff_read = Fieldfile(fname, "r")
+    assert ff_read.hdr.session == "koal1"
+    assert ff_read.hdr.created == "Fri May 03 16:20:23 2024"
+    geom = Geometry(nr=11, ns=11, nz=96, nel=30)
+    assert ff_read.has_equal_geometry(geom)
+    assert ff_read.hdr.step == 400000
+    assert ff_read.hdr.time == 1200
+    assert ff_read.hdr.dt == 0.0005
+    assert ff_read.hdr.kinvis == 0.0001
+    assert ff_read.hdr.beta == 1
+    assert ff_read.fields == ["u", "v", "w", "p"]
+    assert ff_read.hdr.format == "binary"
+
+    ff_write = Fieldfile(fname + "_copy", "w", header=ff_read.hdr)
+    ff_write.write(ff_read.data)
