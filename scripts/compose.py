@@ -137,5 +137,5 @@ def main():
         compose_dual(file1, file2)
 
 
-if __name__ == main():
+if __name__ == "__main__":
     main()
