@@ -20,8 +20,8 @@ class Header:
     def read(self, f: BinaryIO) -> None:
         hdr_lines = [f.readline().decode("ascii") for _ in range(10)]
 
-        self.session = hdr_lines[0].strip().split()[0]
-        self.created = hdr_lines[1].strip().split()[0]
+        self.session = hdr_lines[0].split("Session")[0].strip()
+        self.created = hdr_lines[1].split("Created")[0].strip()
 
         nr, ns, nz, nel = map(int, hdr_lines[2].strip().split()[:4])
         self.geometry = Geometry(nr, ns, nz, nel)
@@ -33,7 +33,7 @@ class Header:
         self.beta = float(hdr_lines[7].strip().split()[0])
 
         self.fields = self._extract_fields(hdr_lines[8].strip())
-        self.format = hdr_lines[9].strip()
+        self.format = hdr_lines[9].split("Format")[0].strip()
 
     @staticmethod
     def _extract_fields(fields_line: str) -> list[str]:
@@ -50,17 +50,18 @@ class Header:
         f.write(str(self).encode("ascii"))
 
     def __str__(self) -> str:
+        geom_str = f"{self.geometry.nr} {self.geometry.ns} {self.geometry.nz} {self.geometry.nel}"
+        fields_str = f"[{','.join(self.fields)}]"
         lines = [
             f"{self.session:<25} Session",
             f"{self.created:<25} Created",
-            f"{self.geometry.nr:<4} {self.geometry.ns:<4} {self.geometry.nz:<4} \
-                    {self.geometry.nel:<6}     Nr, Ns, Nz, Elements",
+            f"{geom_str:<25} Nr, Ns, Nz, Elements",
             f"{self.step:<25} Step",
             f"{self.time:<25g} Time",
             f"{self.dt:<25g} Time step",
             f"{self.kinvis:<25g} Kinvis",
             f"{self.beta:<25g} Beta",
-            f"[{', '.join(self.fields)}] Fields written",
+            f"{fields_str:<25} Fields written",
             f"{self.format:<25} Format",
         ]
         return "\n".join(lines) + "\n"
