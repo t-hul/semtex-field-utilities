@@ -1,3 +1,7 @@
+import os
+import shutil
+import subprocess
+
 import numpy as np
 
 from semtex_fieldio.fieldfile import Fieldfile
@@ -35,10 +39,14 @@ def test_basic_fieldfile_roundtrip(tmp_path):
     assert elmt_data.shape == (2, 1, 1, 2, 2)
 
 
-def test_read_checkpoint():
-    fname = "./tests/data/koal1.1200.chk"
+def test_read_checkpoint(tmp_path):
+    testdata_dir = os.path.join(os.path.dirname(__file__), "data")
+    file_name = "koal1.1200.chk"
+    copy_path = os.path.join(testdata_dir, file_name)
+    orig_file = tmp_path / "original.chk"
+    shutil.copy(copy_path, orig_file)
 
-    ff_read = Fieldfile(fname, "r")
+    ff_read = Fieldfile(str(orig_file), "r")
     assert ff_read.hdr.session == "koal1"
     assert ff_read.hdr.created == "Fri May 03 16:20:23 2024"
     geom = Geometry(nr=11, ns=11, nz=96, nel=30)
@@ -49,7 +57,18 @@ def test_read_checkpoint():
     assert ff_read.hdr.kinvis == 0.0001
     assert ff_read.hdr.beta == 1
     assert ff_read.fields == ["u", "v", "w", "p"]
-    assert ff_read.hdr.format == "binary"
+    assert ff_read.hdr.format == "binary IEEE little-endian"
 
-    ff_write = Fieldfile(fname + "_copy", "w", header=ff_read.hdr)
+    new_file = tmp_path / "copy.chk"
+    ff_write = Fieldfile(str(new_file), "w", header=ff_read.hdr)
     ff_write.write(ff_read.data)
+
+    # Use `diff` to compare file byte-by-byte
+    result = subprocess.run(
+        ["diff", "-q", str(orig_file), str(new_file)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    assert (
+        result.returncode == 0
+    ), f"Files differ:\n{result.stdout.decode()}\n{result.stderr.decode()}"
