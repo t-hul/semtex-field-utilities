@@ -21,7 +21,7 @@ def check_compatibility(ff1: Fieldfile, ff2: Fieldfile) -> None:
 def weighted_add(
     ff1: Fieldfile, ff2: Fieldfile, scale: float
 ) -> tuple[np.ndarray, int]:
-    steps1 = ff1.hdr.step * scale
+    steps1 = int(ff1.hdr.step * scale)
     steps2 = ff2.hdr.step
     total_steps = steps1 + steps2
     result = (ff1.data * steps1 + ff2.data * steps2) / total_steps
@@ -31,7 +31,7 @@ def weighted_add(
 def weighted_subtract(
     ff1: Fieldfile, ff2: Fieldfile, scale: float
 ) -> tuple[np.ndarray, int]:
-    steps1 = ff1.hdr.step * scale
+    steps1 = int(ff1.hdr.step * scale)
     steps2 = ff2.hdr.step
     if steps2 >= steps1:
         raise ValueError("Cannot subtract: file1 must have more steps than file2")
