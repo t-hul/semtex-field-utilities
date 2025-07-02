@@ -20,11 +20,11 @@ def test_basic_fieldfile_roundtrip(tmp_path):
 
     data = np.arange(8, dtype=np.float64)
 
-    ff_write = Fieldfile(str(fname), "w", header=header)
+    ff_write = Fieldfile(fname, "w", header=header)
     ff_write._print_geometry_info()
     ff_write.write(data)
 
-    ff_read = Fieldfile(str(fname), "r")
+    ff_read = Fieldfile(fname, "r")
     ff_read._print_geometry_info()
 
     assert ff_read.hdr.session == "test_session"
@@ -46,7 +46,7 @@ def test_read_checkpoint(tmp_path):
     orig_file = tmp_path / "original.chk"
     shutil.copy(copy_path, orig_file)
 
-    ff_read = Fieldfile(str(orig_file), "r")
+    ff_read = Fieldfile(orig_file, "r")
     assert ff_read.hdr.session == "koal1"
     assert ff_read.hdr.created == "Fri May 03 16:20:23 2024"
     geom = Geometry(nr=11, ns=11, nz=96, nel=30)
@@ -60,7 +60,7 @@ def test_read_checkpoint(tmp_path):
     assert ff_read.hdr.format == "binary IEEE little-endian"
 
     new_file = tmp_path / "copy.chk"
-    ff_write = Fieldfile(str(new_file), "w", header=ff_read.hdr)
+    ff_write = Fieldfile(new_file, "w", header=ff_read.hdr)
     ff_write.write(ff_read.data)
 
     # Use `diff` to compare file byte-by-byte

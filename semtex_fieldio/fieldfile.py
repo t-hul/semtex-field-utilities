@@ -1,5 +1,6 @@
 import logging
-from typing import BinaryIO, Optional
+from pathlib import Path
+from typing import BinaryIO, Optional, Union
 
 import numpy as np
 
@@ -10,16 +11,19 @@ logger = logging.getLogger(__name__)
 
 
 class Fieldfile:
-    def __init__(self, fname: str, mode: str, header: Optional[Header] = None):
+    def __init__(
+        self, fname: Union[str, Path], mode: str, header: Optional[Header] = None
+    ):
         if mode not in ("r", "w"):
             raise ValueError("mode must be 'r' (read) or 'w' (write)")
 
-        self.fname = fname
+        self.fname = Path(fname)
         self.mode = mode
         self.data: np.ndarray | None = None
 
         if mode == "r":
-            with open(fname, "rb") as f:
+            with self.fname.open("rb") as f:
+                logger.info(f"Reading from {self.fname.resolve()}")
                 self.hdr = Header(Geometry())
                 self.hdr.read(f)
                 self._update_geometry_info()
@@ -29,7 +33,8 @@ class Fieldfile:
                 raise ValueError("Need header when writing file")
             self.hdr = header
             self._update_geometry_info()
-            with open(fname, "wb") as f:
+            with self.fname.open("wb") as f:
+                logger.info(f"Writing header to {self.fname.resolve()}")
                 self.hdr.write(f)
                 self._f = f  # if keep_open is needed
         else:
@@ -66,7 +71,8 @@ class Fieldfile:
         if data.dtype != np.float64:
             raise TypeError("Expected float64 data")
         mode = "ab" if keep_open else "r+b"
-        with open(self.fname, mode) as f:
+        with self.fname.open(mode) as f:
+            logger.info(f"Writing data to {self.fname.resolve()}")
             f.seek(0, 2)
             data.tofile(f)
 
