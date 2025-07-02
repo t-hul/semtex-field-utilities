@@ -18,6 +18,13 @@ def check_compatibility(ff1: Fieldfile, ff2: Fieldfile) -> None:
         raise ValueError(f"beta mismatch: {ff1.hdr.beta} != {ff2.hdr.beta}")
 
 
+def check_data(ff1: Fieldfile, ff2: Fieldfile) -> None:
+    if ff1.data is None or ff2.data is None:
+        raise ValueError(f"Field data not loaded correctly")
+    if ff1.data.shape != ff2.data.shape:
+        raise ValueError("Data shape mismatch: {ff1.data.shape} != {ff2.data.shape}")
+
+
 def weighted_add(
     ff1: Fieldfile, ff2: Fieldfile, scale: float
 ) -> tuple[np.ndarray, int]:
@@ -60,15 +67,20 @@ def main():
     args = parser.parse_args()
 
     ff1 = Fieldfile(args.file1, "r")
+    ff1.read_all_data()
 
     if args.add_file:
         ff2 = Fieldfile(args.add_file, "r")
+        ff2.read_all_data()
         check_compatibility(ff1, ff2)
+        check_data(ff1, ff2)
         result_data, result_steps = weighted_add(ff1, ff2, args.scale_steps)
 
     elif args.sub_file:
         ff2 = Fieldfile(args.sub_file, "r")
+        ff2.read_all_data()
         check_compatibility(ff1, ff2)
+        check_data(ff1, ff2)
         result_data, result_steps = weighted_subtract(ff1, ff2, args.scale_steps)
 
     else:

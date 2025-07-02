@@ -25,11 +25,13 @@ def test_basic_fieldfile_roundtrip(tmp_path):
     ff_write.write(data)
 
     ff_read = Fieldfile(fname, "r")
+    ff_read.read_all_data()
     ff_read._print_geometry_info()
 
     assert ff_read.hdr.session == "test_session"
     assert ff_read.hdr.geometry == geom
     assert ff_read.fields == fields
+    assert ff_read.data is not None
     assert ff_read.data.shape == (2, 4)
 
     assert np.allclose(ff_read["u"], [0, 1, 2, 3])
@@ -59,9 +61,11 @@ def test_read_checkpoint(tmp_path):
     assert ff_read.fields == ["u", "v", "w", "p"]
     assert ff_read.hdr.format == "binary IEEE little-endian"
 
+    data = ff_read.read_all_data()
+
     new_file = tmp_path / "copy.chk"
     ff_write = Fieldfile(new_file, "w", header=ff_read.hdr)
-    ff_write.write(ff_read.data)
+    ff_write.write(data)
 
     # Use `diff` to compare file byte-by-byte
     result = subprocess.run(

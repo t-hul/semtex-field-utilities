@@ -17,6 +17,7 @@ def create_dummy_fld(path, fields, shape, value, step):
 
 def read_field_data(path):
     ff = Fieldfile(path, "r")
+    ff.read_all_data()
     return ff.data, ff.hdr.step
 
 

@@ -23,11 +23,11 @@ class Fieldfile:
 
         if mode == "r":
             with self.fname.open("rb") as f:
-                logger.info(f"Reading from {self.fname.resolve()}")
+                logger.info(f"Reading header from {self.fname.resolve()}")
                 self.hdr = Header(Geometry())
                 self.hdr.read(f)
                 self._update_geometry_info()
-                self._read_data(f)
+                # delay reading until explicitly requested
         elif mode == "w":
             if not header:
                 raise ValueError("Need header when writing file")
@@ -57,14 +57,25 @@ class Fieldfile:
         logger.debug(f"npoints: {self.npoints}")
         logger.debug(f"ntotf: {self.ntotf}")
 
-    def _read_data(self, f: BinaryIO) -> None:
-        """Read float64 field data from file into a (nflds, ntot) array."""
-        buf = f.read()
-        flat = np.frombuffer(buf, dtype=np.float64)
+    def read_all_data(self) -> np.ndarray:
+        """Read all float64 field data into memory and reshape."""
+        with self.fname.open("rb") as f:
+            # Skip header
+            for _ in range(10):
+                f.readline()
 
-        if flat.size != self.ntotf:
-            raise ValueError(f"Expected {self.ntotf} values, got {flat.size}.")
-        self.data = flat.reshape((self.nflds, self.npoints))
+            logger.info(f"Reading data from {self.fname.resolve()}")
+            buf = f.read()
+            flat = np.frombuffer(buf, dtype=np.float64)
+
+            if flat.size != self.ntotf:
+                raise ValueError(f"Expected {self.ntotf} values, got {flat.size}.")
+
+            self.data = flat.reshape((self.nflds, self.npoints))
+            logger.info(
+                f"Loaded {self.data.shape[0]} fields with {self.data.shape[1]} points."
+            )
+            return self.data
 
     def write(self, data: np.ndarray, keep_open: bool = False) -> None:
         """Write float64 field data to file."""
