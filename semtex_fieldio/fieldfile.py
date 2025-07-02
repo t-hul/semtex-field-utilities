@@ -40,6 +40,12 @@ class Fieldfile:
         else:
             ValueError("Unsupported mode")
 
+    def __getitem__(self, field_name: str) -> np.ndarray:
+        if self.data is None:
+            raise RuntimeError("No data loaded")
+        idx = self.field_index(field_name)
+        return self.data[idx]
+
     def _update_geometry_info(self) -> None:
         self.fields = self.hdr.fields
         self.geometry = self.hdr.geometry
@@ -57,12 +63,26 @@ class Fieldfile:
         logger.debug(f"npoints: {self.npoints}")
         logger.debug(f"ntotf: {self.ntotf}")
 
+    def _offset(self, field_idx: int = 0, z_idx: int = 0) -> int:
+        """Byte offset for a specific field and z-plane."""
+        nz = self.geometry.nz
+        nel = self.geometry.nel
+        ns = self.geometry.ns
+        nr = self.geometry.nr
+        ntot_z = nel * ns * nr
+        if z_idx >= nz:
+            raise ValueError(f"z_idx {z_idx} exceeds number of planes {nz}")
+        return (field_idx * self.npoints + z_idx * ntot_z) * 8  # bytes
+
+    def _skip_header(self, f: BinaryIO) -> int:
+        for _ in range(10):
+            f.readline()
+        return f.tell()
+
     def read_all_data(self) -> np.ndarray:
         """Read all float64 field data into memory and reshape."""
         with self.fname.open("rb") as f:
-            # Skip header
-            for _ in range(10):
-                f.readline()
+            self._skip_header(f)
 
             logger.info(f"Reading data from {self.fname.resolve()}")
             buf = f.read()
@@ -77,6 +97,69 @@ class Fieldfile:
             )
             return self.data
 
+    def read_fields(self, field_names: list[str]) -> np.ndarray:
+        """Read entire fields for the given field names (all z-planes)."""
+        result = []
+        ntot = self.npoints
+
+        with self.fname.open("rb") as f:
+            hdr_off = self._skip_header(f)
+
+            for name in field_names:
+                logger.info(f"Reading field {name} from {self.fname.resolve()}")
+                idx = self.field_index(name)
+                offset = self._offset(field_idx=idx, z_idx=0)
+                f.seek(offset + hdr_off)
+                buf = f.read(ntot * 8)
+                result.append(np.frombuffer(buf, dtype=np.float64))
+
+        return np.stack(result)
+
+    def read_zplane(
+        self, z_idx: int, field_names: Optional[list[str]] = None
+    ) -> np.ndarray:
+        """Read a specific z-plane for all or selected fields."""
+        if field_names is None:
+            field_names = self.fields
+
+        ntot_z = self.geometry.nel * self.geometry.ns * self.geometry.nr
+        result = []
+
+        with self.fname.open("rb") as f:
+            hdr_off = self._skip_header(f)
+
+            for name in field_names:
+                idx = self.field_index(name)
+                offset = self._offset(field_idx=idx, z_idx=z_idx)
+                f.seek(offset + hdr_off)
+                buf = f.read(ntot_z * 8)
+                result.append(np.frombuffer(buf, dtype=np.float64))
+
+        return np.stack(result)  # shape: (nfields, ntot_z)
+
+    def memory_map(self) -> np.memmap:
+        """Memory-map the field data section of the file (read-only)."""
+        # Estimate header size by reading 10 lines
+        with self.fname.open("rb") as f:
+            hdr_off = self._skip_header(f)
+
+        # Confirm size matches expected total
+        expected_bytes = self.ntotf * 8  # float64
+        actual_bytes = self.fname.stat().st_size - hdr_off
+        if actual_bytes < expected_bytes:
+            raise ValueError(
+                f"File too small for expected data. Missing {expected_bytes - actual_bytes} bytes."
+            )
+
+        shape = (self.nflds, self.npoints)
+        return np.memmap(
+            self.fname,
+            dtype="float64",
+            mode="r",
+            offset=hdr_off,
+            shape=shape,
+        )
+
     def write(self, data: np.ndarray, keep_open: bool = False) -> None:
         """Write float64 field data to file."""
         if data.dtype != np.float64:
@@ -90,12 +173,6 @@ class Fieldfile:
     def write_fields(self, fields: list[np.ndarray]) -> None:
         flat_data = np.concatenate([field.flatten() for field in fields])
         self.write(flat_data)
-
-    def __getitem__(self, field_name: str) -> np.ndarray:
-        if self.data is None:
-            raise RuntimeError("No data loaded")
-        idx = self.field_index(field_name)
-        return self.data[idx]
 
     def field_index(self, name: str) -> int:
         return self.fields.index(name)
