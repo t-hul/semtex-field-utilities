@@ -9,7 +9,7 @@ from .geometry import Geometry
 class Mesh:
     geometry: Geometry
     xy: np.ndarray  # shape: (nel, ns, nr, 2)
-    theta: np.ndarray  # shape: (nz,)
+    theta: np.ndarray  # shape: (nz+1,)
 
     @classmethod
     def from_file(cls, path: str) -> "Mesh":
@@ -38,7 +38,9 @@ class Mesh:
 
             # Read theta values for each z-plane
             theta_data = np.loadtxt(f)
-            if theta_data.size != nz:
-                raise ValueError(f"Expected {nz} theta values, got {theta_data.size}")
+            if theta_data.size != nz + 1:
+                raise ValueError(
+                    f"Expected {nz + 1} theta values, got {theta_data.size}"
+                )
 
         return cls(geometry=geometry, xy=xy, theta=theta_data)
