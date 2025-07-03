@@ -6,7 +6,7 @@ It is based on the scripts provided by Hugh Blackburn and Thomas Albrecht in Sem
 The original scripts are updated to a mor modern approach.
 
 ## Installation using pip install
-To install the library plot_utils in edit mode run
+To install the libraries semtex_fieldio and semtex_fieldplot in edit mode run
 ```
 pip install -e .
 ```
@@ -17,6 +17,9 @@ in the projects root directory.
 - use dataclasses and type annotations
 - use fieldstring naming convention
 - added pytest functionality
+- added read functions to load partial field data (selected fields, zplanes) or allow dynamic access to data storage
+- added Mesh class to store mesh data
+- added plotting module with functions to plot the mesh and create contour plot of a field
 
 ## Testing
 To run the tests execute 
