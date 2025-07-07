@@ -35,7 +35,7 @@ def weighted_add(
     ff1: Fieldfile, ff2: Fieldfile, scale: float
 ) -> tuple[np.ndarray, int]:
     steps1 = int(ff1.hdr.step * scale)
-    steps1 = input_if_zero(steps1, "file1")
+    steps1 = int(input_if_zero(steps1, "file1") * scale)
     steps2 = ff2.hdr.step
     steps2 = input_if_zero(steps2, "file2")
     total_steps = steps1 + steps2
@@ -47,7 +47,7 @@ def weighted_subtract(
     ff1: Fieldfile, ff2: Fieldfile, scale: float
 ) -> tuple[np.ndarray, int]:
     steps1 = int(ff1.hdr.step * scale)
-    steps1 = input_if_zero(steps1, "file1")
+    steps1 = int(input_if_zero(steps1, "file1") * scale)
     steps2 = ff2.hdr.step
     steps2 = input_if_zero(steps2, "file2")
     if steps2 >= steps1:
