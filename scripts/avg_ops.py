@@ -1,4 +1,5 @@
 import argparse
+from copy import deepcopy
 
 import numpy as np
 
@@ -32,19 +33,21 @@ def input_if_zero(steps: int, name: str) -> int:
 
 
 def weighted_add(
-    ff1: Fieldfile, ff2: Fieldfile, scale: float
+    ff1: Fieldfile, ff2: Fieldfile, scale: float, steps_only: bool = False
 ) -> tuple[np.ndarray, int]:
     steps1 = int(ff1.hdr.step * scale)
     steps1 = int(input_if_zero(steps1, "file1") * scale)
     steps2 = ff2.hdr.step
     steps2 = input_if_zero(steps2, "file2")
     total_steps = steps1 + steps2
+    if steps_only:
+        return total_steps
     result = (ff1.data * steps1 + ff2.data * steps2) / total_steps
     return result, total_steps
 
 
 def weighted_subtract(
-    ff1: Fieldfile, ff2: Fieldfile, scale: float
+    ff1: Fieldfile, ff2: Fieldfile, scale: float, steps_only: bool = False
 ) -> tuple[np.ndarray, int]:
     steps1 = int(ff1.hdr.step * scale)
     steps1 = int(input_if_zero(steps1, "file1") * scale)
@@ -53,6 +56,8 @@ def weighted_subtract(
     if steps2 >= steps1:
         raise ValueError("Cannot subtract: file1 must have more steps than file2")
     result_steps = steps1 - steps2
+    if steps_only:
+        return result_steps
     result = (ff1.data * steps1 - ff2.data * steps2) / result_steps
     return result, result_steps
 
@@ -76,29 +81,38 @@ def main():
     )
     args = parser.parse_args()
 
+    # read and write headers
     ff1 = Fieldfile(args.file1, "r")
-    ff1.read_all_data()
-
+    result_steps = ff1.hdr.step
     if args.add_file:
         ff2 = Fieldfile(args.add_file, "r")
-        ff2.read_all_data()
         check_compatibility(ff1, ff2)
-        check_data(ff1, ff2)
-        result_data, result_steps = weighted_add(ff1, ff2, args.scale_steps)
-
+        result_steps = weighted_add(ff1, ff2, args.scale_steps, steps_only=True)
     elif args.sub_file:
         ff2 = Fieldfile(args.sub_file, "r")
-        ff2.read_all_data()
         check_compatibility(ff1, ff2)
-        check_data(ff1, ff2)
-        result_data, result_steps = weighted_subtract(ff1, ff2, args.scale_steps)
-
+        result_steps = weighted_subtract(ff1, ff2, args.scale_steps, steps_only=True)
     else:
         raise RuntimeError("Either --add or --subtract must be provided")
 
-    ff1.hdr.step = result_steps
-    out_file = Fieldfile(args.output, "w", ff1.hdr)
-    out_file.write(result_data)
+    out_hdr = deepcopy(ff1.hdr)
+    out_hdr.step = result_steps
+    out_file = Fieldfile(args.output, "w", out_hdr)
+
+    # process one field at a time
+    for field in ff1.fields:
+        ff1.data = ff1.read_fields([field])
+        if args.add_file:
+            ff2.data = ff2.read_fields([field])
+            check_data(ff1, ff2)
+            result_data, result_steps = weighted_add(ff1, ff2, args.scale_steps)
+
+        elif args.sub_file:
+            ff2.data = ff2.read_fields([field])
+            check_data(ff1, ff2)
+            result_data, result_steps = weighted_subtract(ff1, ff2, args.scale_steps)
+
+        out_file.write(result_data)
 
 
 if __name__ == "__main__":

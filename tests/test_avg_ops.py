@@ -41,8 +41,8 @@ def test_weighted_add_and_subtract(tmp_path):
     )
     data_add, step_add = read_field_data(out_add)
     expected_add = (2.0 * 10 + 1.0 * 4) / (10 + 4)
-    assert np.allclose(data_add, expected_add)
     assert step_add == 14
+    assert np.allclose(data_add, expected_add)
 
     # Subtract
     subprocess.run(
