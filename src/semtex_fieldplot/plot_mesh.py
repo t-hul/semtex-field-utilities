@@ -30,12 +30,6 @@ def plot_mesh_xy(ax, mesh):
                 color = "gray"
             ax.plot(x, y, color=color, linewidth=linewidth)
 
-    ax.set_aspect("equal")
-    ax.set_title("Mesh in xy-plane")
-    plt.xlabel("x")
-    plt.ylabel("r")
-    # plt.grid(True)
-
 
 def plot_mesh_xy_symm(ax, mesh, only_elements=False):
 
@@ -71,9 +65,3 @@ def plot_mesh_xy_symm(ax, mesh, only_elements=False):
                     continue
             ax.plot(x, y, color=color, linewidth=linewidth)
             ax.plot(x, -y, color=color, linewidth=linewidth)
-
-    ax.set_aspect("equal")
-    ax.set_title("Mesh in xy-plane")
-    plt.xlabel("x")
-    plt.ylabel("r")
-    # plt.grid(True)
