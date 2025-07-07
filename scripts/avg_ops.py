@@ -25,11 +25,19 @@ def check_data(ff1: Fieldfile, ff2: Fieldfile) -> None:
         raise ValueError("Data shape mismatch: {ff1.data.shape} != {ff2.data.shape}")
 
 
+def input_if_zero(steps: int, name: str) -> int:
+    if steps == 0:
+        return int(input(f"Steps of {name} are 0. Enter correct number of steps: "))
+    return steps
+
+
 def weighted_add(
     ff1: Fieldfile, ff2: Fieldfile, scale: float
 ) -> tuple[np.ndarray, int]:
     steps1 = int(ff1.hdr.step * scale)
+    steps1 = input_if_zero(steps1, "file1")
     steps2 = ff2.hdr.step
+    steps2 = input_if_zero(steps2, "file2")
     total_steps = steps1 + steps2
     result = (ff1.data * steps1 + ff2.data * steps2) / total_steps
     return result, total_steps
@@ -39,7 +47,9 @@ def weighted_subtract(
     ff1: Fieldfile, ff2: Fieldfile, scale: float
 ) -> tuple[np.ndarray, int]:
     steps1 = int(ff1.hdr.step * scale)
+    steps1 = input_if_zero(steps1, "file1")
     steps2 = ff2.hdr.step
+    steps2 = input_if_zero(steps2, "file2")
     if steps2 >= steps1:
         raise ValueError("Cannot subtract: file1 must have more steps than file2")
     result_steps = steps1 - steps2
