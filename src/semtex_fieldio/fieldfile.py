@@ -138,6 +138,21 @@ class Fieldfile:
 
         return np.stack(result)  # shape: (nfields, ntot_z)
 
+    def get_data_dict(
+        self, data: np.ndarray, field_names: Optional[list[str]] = None
+    ) -> dict[np.ndarray]:
+        if field_names is None:
+            field_names = self.fields
+        if len(field_names) != data.shape[0]:
+            raise ValueError(
+                f"Number of field names ({len(field_names)}) not equal to data.shape[0] ({data.shape[0]})"
+            )
+        data_dict = {}
+        for i, key in enumerate(field_names):
+            data_dict[key] = data[i, :]
+        logger.info("Created data dict")
+        return data_dict
+
     def memory_map(self) -> np.memmap:
         """Memory-map the field data section of the file (read-only)."""
         # Estimate header size by reading 10 lines
