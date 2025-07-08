@@ -27,11 +27,13 @@ def test_weighted_add_and_subtract(tmp_path):
     fields = ["A", "B"]
 
     file1 = tmp_path / "file1.fld"
+    file_avg = tmp_path / "file1.avg"
     file2 = tmp_path / "file2.fld"
     out_add = tmp_path / "add.fld"
     out_sub = tmp_path / "sub.fld"
 
-    data1 = create_dummy_fld(file1, fields, shape, value=2.0, step=10)
+    data1 = create_dummy_fld(file1, fields, shape, value=2.0, step=0)
+    data_avg = create_dummy_fld(file_avg, fields, shape, value=2.0, step=10)
     data2 = create_dummy_fld(file2, fields, shape, value=1.0, step=4)
 
     # Add
@@ -43,6 +45,12 @@ def test_weighted_add_and_subtract(tmp_path):
     expected_add = (2.0 * 10 + 1.0 * 4) / (10 + 4)
     assert step_add == 14
     assert np.allclose(data_add, expected_add)
+
+    # delete .avg file with step info
+    # subprocess.run(
+    #     ["rm", str(file_avg)],
+    #     check=True,
+    # )
 
     # Subtract
     subprocess.run(

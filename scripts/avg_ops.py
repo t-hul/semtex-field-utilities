@@ -1,10 +1,14 @@
 import argparse
+import logging
 from copy import deepcopy
 from pathlib import Path
 
 import numpy as np
 
 from semtex_fieldio.fieldfile import Fieldfile
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def check_compatibility(ff1: Fieldfile, ff2: Fieldfile) -> None:
@@ -30,8 +34,12 @@ def check_data(ff1: Fieldfile, ff2: Fieldfile) -> None:
 def read_avg_if_zero(steps: int, path: Path) -> int:
     if steps == 0:
         avg_path = path.with_suffix(".avg")
-        ff_avg = Fieldfile(avg_path, "r")
-        steps = ff_avg.hdr.step
+        logger.info(f"Steps in {path.name} is zero, reading header of {avg_path.name}")
+        try:
+            ff_avg = Fieldfile(avg_path, "r")
+            steps = ff_avg.hdr.step
+        except:
+            logger.info("Could not read {avg_path.name}")
         # fallback to input if still zero
         return input_if_zero(steps, avg_path.name)
     return steps
