@@ -1,5 +1,6 @@
 import argparse
 from copy import deepcopy
+from pathlib import Path
 
 import numpy as np
 
@@ -26,6 +27,16 @@ def check_data(ff1: Fieldfile, ff2: Fieldfile) -> None:
         raise ValueError("Data shape mismatch: {ff1.data.shape} != {ff2.data.shape}")
 
 
+def read_avg_if_zero(steps: int, path: Path) -> int:
+    if steps == 0:
+        avg_path = path.with_suffix(".avg")
+        ff_avg = Fieldfile(avg_path, "r")
+        steps = ff_avg.hdr.step
+        # fallback to input if still zero
+        return input_if_zero(steps, avg_path.name)
+    return steps
+
+
 def input_if_zero(steps: int, name: str) -> int:
     if steps == 0:
         return int(input(f"Steps of {name} are 0. Enter correct number of steps: "))
@@ -36,9 +47,9 @@ def weighted_add(
     ff1: Fieldfile, ff2: Fieldfile, scale: float, steps_only: bool = False
 ) -> tuple[np.ndarray, int]:
     steps1 = int(ff1.hdr.step * scale)
-    steps1 = int(input_if_zero(steps1, "file1") * scale)
+    steps1 = int(read_avg_if_zero(steps1, ff1.fname) * scale)
     steps2 = ff2.hdr.step
-    steps2 = input_if_zero(steps2, "file2")
+    steps2 = read_avg_if_zero(steps2, ff2.fname)
     total_steps = steps1 + steps2
     if steps_only:
         return total_steps
@@ -50,9 +61,9 @@ def weighted_subtract(
     ff1: Fieldfile, ff2: Fieldfile, scale: float, steps_only: bool = False
 ) -> tuple[np.ndarray, int]:
     steps1 = int(ff1.hdr.step * scale)
-    steps1 = int(input_if_zero(steps1, "file1") * scale)
+    steps1 = int(read_avg_if_zero(steps1, ff1.fname) * scale)
     steps2 = ff2.hdr.step
-    steps2 = input_if_zero(steps2, "file2")
+    steps2 = read_avg_if_zero(steps2, ff2.fname)
     if steps2 >= steps1:
         raise ValueError("Cannot subtract: file1 must have more steps than file2")
     result_steps = steps1 - steps2
