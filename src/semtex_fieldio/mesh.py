@@ -101,3 +101,72 @@ class Mesh:
                     triangles.append([n0, n2, n3])
 
         return np.array(triangles)
+
+    def axial_node_mask_with_r(
+        self, x_target: float, tol: float = 0.05
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Return a boolean mask selecting nodes that bracket x_target per (element, s) line,
+        anlong with their corresponding radial positions (exact or interpolated).
+
+        Parameters
+        ----------
+        x_target : float
+            Target axial position.
+        tol : float
+            Broad tolerance to pre-select candidate nodes.
+
+        Returns
+        -------
+        mask : np.ndarray of shape (nel, ns, nr)
+            Boolean mask selecting 1 or 2 nodes per (element, s) line
+        r_target : np.ndarray of shape (n_selected,)
+            Radial positions (either exact or interpolated) of selected nodes.
+        """
+        x = self.xy[..., 0]  # shape: (nel, ns, nr)
+        r = self.xy[..., 1]  # shape: (nel, ns, nr)
+        nel, ns, nr = x.shape
+        mask = np.zeros_like(x, dtype=bool)
+        r_target_list = []
+
+        for e in range(nel):
+            for s in range(ns):
+                x_line = x[e, s, :]
+                r_line = r[e, s, :]
+                diffs = x_line - x_target
+
+                in_tol = np.abs(diffs) < tol
+                if not np.any(in_tol):
+                    continue
+
+                # Check for exact match
+                exact = np.isclose(diffs, 0.0)
+                if np.any(exact):
+                    r_idx = np.where(exact)
+                    mask[e, s, r_idx] = True
+                    r_target_list.append(r_line[r_idx])
+                    continue
+
+                # Otherwise, find one node below and one above
+                below = np.where(diffs < 0)[0]
+                above = np.where(diffs > 0)[0]
+
+                if below.size == 0 or above.size == 0:
+                    continue  # can not interpolate - x_target not bracketed
+
+                # Closest below and above index
+                i_below = below[np.argmin(np.abs(diffs[below]))]
+                i_above = above[np.argmin(np.abs(diffs[above]))]
+
+                # Linear interpolation
+                x0, x1 = x_line[i_below], x_line[i_above]
+                r0, r1 = r_line[i_below], r_line[i_above]
+                weight = (x_target - x0) / (x1 - x0)
+                r_interp = r0 * (1 - weight) + r1 * weight
+
+                mask[e, s, i_below] = True
+                mask[e, s, i_above] = True
+                r_target_list.append(r_interp)
+
+        r_target = np.array(r_target_list)
+        return mask, r_target
