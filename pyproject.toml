@@ -3,7 +3,7 @@ name = "semtex-field-utilities"
 version = "0.1.0"
 description = "Modern Python interface for Semtex field files and utility tools. Based on Scripts by Hugh Blackburn and Thomas Albrecht"
 authors = [{ name = "Thomas Hultsch" }]
-dependencies = ["numpy", "matplotlib", "pyyaml"]
+dependencies = ["numpy", "matplotlib", "pyyaml", "scipy"]
 
 [build-system]
 requires = ["setuptools"]
