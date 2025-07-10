@@ -147,7 +147,7 @@ def plot_axial_planes_for_file(
         if isinstance(x_target, list):
             x_target = x_target[0]
             logger.warning(f"Choosing first value of x_slice list: {x_target}")
-    if not x_target:
+    if x_target is None:
         raise ValueError("x_slice not defined in config")
     logger.info(f"Plotting axial slice at x = {x_target}")
 
