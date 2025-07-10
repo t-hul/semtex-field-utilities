@@ -81,6 +81,37 @@ class Mesh:
             self.triangulate(dual=dual)
         return self._triangulation
 
+    def triangulate_axial_slice(self, r_target: np.ndarray) -> tri.Triangulation:
+        theta = self.theta[:-1]  # shape: (nz,)
+        nz = len(theta)
+        nr = len(r_target)
+
+        # Structured grid (theta varies along axis=0, r along axis=1)
+        Theta, R = np.meshgrid(theta, r_target, indexing="ij")  # shape: (nz, nr)
+
+        Y = R * np.cos(Theta)
+        Z = R * np.sin(Theta)
+
+        # Flatten for triangulation
+        y_flat = Y.flatten()
+        z_flat = Z.flatten()
+
+        # Structured grid triangulation
+        triangles = []
+        for i in range(nz):
+            i_next = (i + 1) % nz  # wrap around in 0
+            for j in range(nr - 1):
+                n0 = i * nr + j
+                n1 = i_next * nr + j
+                n2 = i_next * nr + (j + 1)
+                n3 = i * nr + (j + 1)
+                triangles.append([n0, n1, n2])
+                triangles.append([n0, n2, n3])
+
+        triang = tri.Triangulation(y_flat, z_flat, triangles=np.array(triangles))
+        logger.info(f"Created triangulation of axial slice with {len(y_flat)} points")
+        return triang
+
     def _build_element_triangles(self) -> np.array:
         triangles = []
 
