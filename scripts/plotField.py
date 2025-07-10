@@ -34,7 +34,7 @@ def process_config(config, config_path=None, cli_args=None):
     file_names = utils.get_file_list(config.get("data_files", []))
 
     conf.set_font_sizes(config)
-    conf.set_plot_style()
+    conf.set_plot_style(config)
 
     try:
         plot_from_config(file_names, config, save_path)
