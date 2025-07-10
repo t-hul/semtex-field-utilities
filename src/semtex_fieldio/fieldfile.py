@@ -115,6 +115,33 @@ class Fieldfile:
 
         return np.stack(result)
 
+    def read_fields_masked(
+        self, field_names: list[str], mask: np.ndarray
+    ) -> np.ndarray:
+        """Read masked node values for all z-planes from selected fields."""
+        nel, ns, nr = mask.shape
+        if (self.geometry.nel, self.geometry.ns, self.geometry.nr) != (nel, ns, nr):
+            raise ValueError("Mask shape does not match fieldfile geometry")
+
+        nz = self.geometry.nz
+        nfields = len(field_names)
+        n_selected = np.count_nonzero(mask)
+
+        if n_selected == 0:
+            raise ValueError("Mask does not select any nodes")
+
+        data_selected = np.empty((nfields, nz, n_selected), dtype=np.float64)
+
+        for z_idx in range(nz):
+            plane_data = self.read_zplane(
+                z_idx, field_names
+            )  # shape: (nfields, nel*ns*nr)
+            for i, field_data in enumerate(plane_data):
+                field_reshaped = field_data.reshape((nel, ns, nr))
+                data_selected[i, z_idx] = field_reshaped[mask]
+
+        return data_selected  # shape: (nfields, nz, n_selected)
+
     def read_zplane(
         self, z_idx: int, field_names: Optional[list[str]] = None
     ) -> np.ndarray:
@@ -134,7 +161,7 @@ class Fieldfile:
                 f.seek(offset + hdr_off)
                 buf = f.read(ntot_z * 8)
                 result.append(np.frombuffer(buf, dtype=np.float64))
-                logger.info(f"Read plane {z_idx} of field {name} with {ntot_z} bytes")
+                logger.debug(f"Read plane {z_idx} of field {name} with {ntot_z} bytes")
 
         return np.stack(result)  # shape: (nfields, ntot_z)
 
@@ -149,7 +176,7 @@ class Fieldfile:
             )
         data_dict = {}
         for i, key in enumerate(field_names):
-            data_dict[key] = data[i, :]
+            data_dict[key] = data[i, ...]
         logger.info("Created data dict")
         return data_dict
 
