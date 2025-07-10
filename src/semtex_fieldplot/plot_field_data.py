@@ -117,6 +117,8 @@ def plot_meridional_planes_for_file(
             label = proc.get_axis_label(
                 field, config.get("normalize"), config.get("use_plus")
             )
+            if not config.get("usetex", True):
+                label = label.strip("$")
         else:
             label = field
         plot_field_meridional_contour(
@@ -179,6 +181,8 @@ def plot_axial_planes_for_file(
             label = proc.get_axis_label(
                 field, config.get("normalize"), config.get("use_plus")
             )
+            if not config.get("usetex", True):
+                label = label.strip("$")
         else:
             label = field
         plot_field_axial_contour(
