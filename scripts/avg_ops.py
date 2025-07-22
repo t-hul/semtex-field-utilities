@@ -31,7 +31,7 @@ def check_data(ff1: Fieldfile, ff2: Fieldfile) -> None:
         raise ValueError("Data shape mismatch: {ff1.data.shape} != {ff2.data.shape}")
 
 
-def read_avg_if_zero(steps: int, path: Path) -> int:
+def read_avg_if_zero(steps: int, path: Path, scale: float = 1) -> int:
     if steps == 0:
         avg_path = path.with_suffix(".avg")
         logger.info(f"Steps in {path.name} is zero, reading header of {avg_path.name}")
@@ -41,7 +41,7 @@ def read_avg_if_zero(steps: int, path: Path) -> int:
         except:
             logger.info("Could not read {avg_path.name}")
         # fallback to input if still zero
-        return input_if_zero(steps, avg_path.name)
+        return int(input_if_zero(steps, avg_path.name) * scale)
     return steps
 
 
@@ -55,7 +55,7 @@ def weighted_add(
     ff1: Fieldfile, ff2: Fieldfile, scale: float, steps_only: bool = False
 ) -> tuple[np.ndarray, int]:
     steps1 = int(ff1.hdr.step * scale)
-    steps1 = int(read_avg_if_zero(steps1, ff1.fname) * scale)
+    steps1 = read_avg_if_zero(steps1, ff1.fname, scale)
     steps2 = ff2.hdr.step
     steps2 = read_avg_if_zero(steps2, ff2.fname)
     total_steps = steps1 + steps2
@@ -70,7 +70,7 @@ def weighted_subtract(
     ff1: Fieldfile, ff2: Fieldfile, scale: float, steps_only: bool = False
 ) -> tuple[np.ndarray, int]:
     steps1 = int(ff1.hdr.step * scale)
-    steps1 = int(read_avg_if_zero(steps1, ff1.fname) * scale)
+    steps1 = read_avg_if_zero(steps1, ff1.fname, scale)
     steps2 = ff2.hdr.step
     steps2 = read_avg_if_zero(steps2, ff2.fname)
     if steps2 >= steps1:
