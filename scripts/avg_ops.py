@@ -93,6 +93,11 @@ def main():
         default=1.0,
         help="Scale factor for file1's step count",
     )
+    parser.add_argument(
+        "--omit_c",
+        action="store_true",
+        help="Omit fields related to 'c'. Use when combining different Pr.",
+    )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--add", dest="add_file", help="Second field file to add")
     group.add_argument(
@@ -120,6 +125,9 @@ def main():
 
     # process one field at a time
     for field in ff1.fields:
+        if args.omit_c and ("c" in field or field in ["G", "H", "I", "J"]):
+            logger.info(f"omit_c: Skipping field {field}")
+            continue
         ff1.data = ff1.read_fields([field])
         if args.add_file:
             ff2.data = ff2.read_fields([field])
