@@ -123,13 +123,17 @@ def main():
 
     out_hdr = deepcopy(ff1.hdr)
     out_hdr.step = result_steps
+    if args.omit_c:
+        out_hdr.fields = [
+            f for f in out_hdr.fields if "c" not in f or f not in ["G", "H", "I", "J"]
+        ]
+        logger.info(
+            f"omit_c: Omitting fields: {[f for f in ff1.fields if f not in out_hdr.fields]}"
+        )
     out_file = Fieldfile(args.output, "w", out_hdr)
 
     # process one field at a time
-    for field in ff1.fields:
-        if args.omit_c and ("c" in field or field in ["G", "H", "I", "J"]):
-            logger.info(f"omit_c: Skipping field {field}")
-            continue
+    for field in out_hdr.fields:
         ff1.data = ff1.read_fields([field])
         if args.add_file:
             ff2.data = ff2.read_fields([field])
