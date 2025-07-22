@@ -125,7 +125,7 @@ def main():
     out_hdr.step = result_steps
     if args.omit_c:
         out_hdr.fields = [
-            f for f in out_hdr.fields if "c" not in f or f not in ["G", "H", "I", "J"]
+            f for f in ff1.hdr.fields if "c" not in f and f not in ["G", "H", "I", "J"]
         ]
         logger.info(
             f"omit_c: Omitting fields: {[f for f in ff1.fields if f not in out_hdr.fields]}"
