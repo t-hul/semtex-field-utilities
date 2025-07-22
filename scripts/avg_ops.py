@@ -60,6 +60,7 @@ def weighted_add(
     steps2 = read_avg_if_zero(steps2, ff2.fname)
     total_steps = steps1 + steps2
     if steps_only:
+        logger.info(f"adding {steps1} and {steps2} steps: {total_steps}")
         return total_steps
     result = (ff1.data * steps1 + ff2.data * steps2) / total_steps
     return result, total_steps
@@ -76,6 +77,7 @@ def weighted_subtract(
         raise ValueError("Cannot subtract: file1 must have more steps than file2")
     result_steps = steps1 - steps2
     if steps_only:
+        logger.info(f"subtracting {steps2} from {steps1} steps: {result_steps}")
         return result_steps
     result = (ff1.data * steps1 - ff2.data * steps2) / result_steps
     return result, result_steps
