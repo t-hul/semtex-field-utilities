@@ -1,22 +1,40 @@
 import logging
+from typing import Optional  # , Tuple, Union
 
+import matplotlib.colors as colors
 import matplotlib.pyplot as plt
+import matplotlib.tri as mtri
 import numpy as np
 import plot_utils.config as conf
 import plot_utils.processor as proc
 import plot_utils.utils as utils
+from matplotlib.axes import Axes
+from matplotlib.ticker import FuncFormatter, MultipleLocator
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from plot_utils.plotter import plot_additions
 
 from semtex_fieldio.fieldfile import Fieldfile
 from semtex_fieldio.mesh import Mesh
 from semtex_fieldplot import interpolation
 from semtex_fieldplot.plot_mesh import plot_mesh_xy, plot_mesh_xy_symm
 
+# from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+
+
 logger = logging.getLogger(__name__)
 
 
 def plot_field_meridional_contour(
-    ax, mesh, field_zplane_1, field_zplane_2=None, levels=30, cmap="viridis", label=None
+    ax,
+    mesh: Mesh,
+    field_zplane_1: np.ndarray,
+    field_zplane_2=None,
+    levels=30,
+    z_lim=[None, None],
+    cmap="viridis",
+    label=None,
+    auto_range_x_lim=None,
+    auto_range_y_lim=None,
 ):
     logger.info(f"Plotting field data with label {label}")
     nel, ns, nr = mesh.geometry.nel, mesh.geometry.ns, mesh.geometry.nr
@@ -27,35 +45,57 @@ def plot_field_meridional_contour(
         if field_zplane_2 is not None:
             z2 = field_zplane_2.flatten()
             z = np.concatenate([z, z2])
-            triang = mesh.get_triangulation(dual=True)
+            # triang = mesh.get_triangulation(dual=True)
+            triang, dedup_indices = mesh.get_deduplicated_triangulation(dual=True)
         else:
-            triang = mesh.get_triangulation()
-    except:
-        raise RuntimeError("Error getting triangulation")
+            # triang = mesh.get_triangulation()
+            triang, dedup_indices = mesh.get_deduplicated_triangulation()
+    except Exception as e:
+        raise RuntimeError(f"Error getting triangulation: {e}")
 
     logger.debug(f"len(z): {len(z)}")
-    contour = ax.tricontourf(triang, z, levels=levels, cmap=cmap)
+    levels, norm, ticks, extend = apply_z_limits(
+        ax,
+        mesh,
+        z,
+        z_lim,
+        levels,
+        auto_range_x_lim=auto_range_x_lim,
+        auto_range_y_lim=auto_range_y_lim,
+    )
+    contour = ax.tricontourf(
+        triang, z[dedup_indices], levels=levels, cmap=cmap, norm=norm, extend=extend
+    )
+
     ax.set_aspect("equal")
     # ax.set_title("Field Contour at z-plane")
 
     # Create colorbar axis that matches the height of the main axis
-    ax.set_xlabel(r"$x$")
-    ax.set_ylabel(r"$r$")
-
     # plt.grid(True)
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="3%", pad=0.1)
-    plt.colorbar(contour, cax=cax, label=rf"${label}$")
+    ax.figure.colorbar(
+        contour, cax=cax, label=rf"${label}$", ticks=ticks, extend=extend
+    )
 
 
 def plot_field_axial_contour(
-    ax, triang, field_data, levels=30, cmap="viridis", label=None
+    ax,
+    triang,
+    field_data: np.ndarray,
+    levels=30,
+    z_lim=[None, None],
+    cmap="viridis",
+    label=None,
 ):
     logger.info(f"Plotting field data with label {label}")
 
     z = field_data.flatten()
 
-    contour = ax.tricontourf(triang, z, levels=levels, cmap=cmap)
+    levels, norm, ticks, extend = apply_z_limits(z, z_lim, levels)
+    contour = ax.tricontourf(
+        triang, z, levels=levels, cmap=cmap, norm=norm, extend=extend
+    )
     ax.set_aspect("equal")
     # ax.set_title("Field Contour at z-plane")
 
@@ -66,7 +106,7 @@ def plot_field_axial_contour(
     # plt.grid(True)
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.1)
-    plt.colorbar(contour, cax=cax, label=rf"${label}$")
+    plt.colorbar(contour, cax=cax, label=rf"${label}$", ticks=ticks, extend=extend)
 
 
 def plot_meridional_planes_for_file(
@@ -78,15 +118,29 @@ def plot_meridional_planes_for_file(
         raise RuntimeError("Geometry mismatch")
 
     # Load data
+    load_fields = utils.get_needed_fields(field_list, ff.fields)
     z_idx = config.get("plane_index", 0)
-    data1 = ff.read_zplane(z_idx, field_names=field_list)
-    data_dict = ff.get_data_dict(data1, field_names=field_list)
+    data1 = ff.read_zplane(z_idx, field_names=load_fields)
+    data_dict = ff.get_data_dict(data1, field_names=load_fields)
 
     # Normalization
+    # aspect_ratio = 1.0
     scaling_params = utils.get_scaling_parameters(config, None, 1)
+    # mesh.normalize(**scaling_params)
+    # if (
+    #     scaling_params["axial_scale"][0] is not None
+    #     and scaling_params["radius_scale"][0] is not None
+    # ):
+    #     aspect_ratio = (
+    #         scaling_params["radius_scale"][0] / scaling_params["axial_scale"][0]
+    #     )
     data_dict = proc.normalize_data(
-        data_dict, config.get("normalize"), **scaling_params
+        data_dict,
+        config.get("normalize"),
+        quantity_type=config.get("quantity_type"),
+        **scaling_params,
     )[0]
+    data_dict = proc.append_calculated_data(data_dict, **scaling_params)[0]
     data1 = np.vstack([data_dict[name] for name in field_list])
 
     cmap = config.get("color_map", "viridis")
@@ -95,16 +149,21 @@ def plot_meridional_planes_for_file(
     if config.get("dual_plane", False):
         if ff.geometry.nz == 1:
             data2 = data1
+            data_dict2 = data_dict
         else:
             z_idx_2 = (z_idx + ff.geometry.nz // 2) % ff.geometry.nz
-            data2 = ff.read_zplane(z_idx_2, field_names=field_list)
-            data_dict2 = ff.get_data_dict(data2, field_names=field_list)
+            data2 = ff.read_zplane(z_idx_2, field_names=load_fields)
+            data_dict2 = ff.get_data_dict(data2, field_names=load_fields)
             data_dict2 = proc.normalize_data(
                 data_dict2, config.get("normalize"), **scaling_params
             )[0]
+            data_dict2 = proc.append_calculated_data(data_dict2, **scaling_params)[0]
             data2 = np.vstack([data_dict2[name] for name in field_list])
     else:
         data2 = None
+        data_dict2 = None
+        if not field_list and config.get("plot_mesh"):
+            plot_mesh_xy(axs[0], mesh, only_elements=True)
 
     # Plot fields
     for i, field in enumerate(field_list):
@@ -115,27 +174,71 @@ def plot_meridional_planes_for_file(
 
         if config.get("normalize"):
             label = proc.get_axis_label(
-                field, config.get("normalize"), config.get("use_plus")
+                field,
+                config.get("normalize"),
+                config.get("use_plus"),
+                quantity_type=config.get("quantity_type"),
             )
+            # mathtex from matplotlib automatically adds '$', remove manual ones
             if not config.get("usetex", True):
                 label = label.strip("$")
         else:
             label = field
+
+        z_lim = utils.get_z_limits(config, field)
+
+        levels = config.get("levels", 30)
         plot_field_meridional_contour(
             axs[i],
             mesh,
             data1[i],
             field_zplane_2=d2,
             label=label,
+            z_lim=z_lim,
             cmap=cmap,
+            levels=levels,
+            auto_range_x_lim=utils.list_to_tuple(config.get("auto_range_x_lim")),
+            auto_range_y_lim=utils.list_to_tuple(config.get("auto_range_y_lim")),
         )
-
+        print(f"max of field {field}: {np.max(data1[i])}")
         conf.set_axis_limits(axs[i], config)
+        if scaling_params["axial_scale"][0] is not None:
+            axs[i].set_xlabel(r"$x / L_\mathrm{c}$")
+            x_scale = scaling_params["axial_scale"][0]
+            axs[i].xaxis.set_major_formatter(
+                FuncFormatter(lambda v, _: f"{v/x_scale:g}")
+            )
+            axs[i].xaxis.set_major_locator(MultipleLocator(base=0.25 * x_scale))
+        else:
+            axs[i].set_xlabel(r"$x$")
+        if scaling_params["radius_scale"][0] is not None:
+            axs[i].set_ylabel(r"$r / R$")
+            y_scale = scaling_params["radius_scale"][0]
+            axs[i].yaxis.set_major_formatter(
+                FuncFormatter(lambda v, _: f"{v/y_scale:g}")
+            )
+            axs[i].yaxis.set_major_locator(MultipleLocator(base=0.5 * y_scale))
+        else:
+            axs[i].set_ylabel(r"$r$")
+
+        if config.get("streamlines") and i == 0:
+            add_streamlines(
+                axs[i],
+                mesh,
+                data_dict,
+                data_dict2=data_dict2,
+                density=(2.5, 0.75),
+                linewidth=0.5,
+                color="black",
+                arrowsize=0.5,
+            )
 
         if config.get("plot_mesh"):
             plot_mesh_xy_symm(axs[i], mesh, only_elements=True)
         if i < len(field_list) - 1:
             axs[i].set_xlabel("")
+
+        plot_additions(axs[i], config)
 
 
 def plot_axial_planes_for_file(
@@ -154,7 +257,7 @@ def plot_axial_planes_for_file(
     logger.info(f"Plotting axial slice at x = {x_target}")
 
     mask, r_target = mesh.axial_node_mask_with_r(x_target, tol=0.25)
-    triang = mesh.triangulate_axial_slice(r_target)
+    triang = mesh.triangulate_axial_slice(x_target, r_target)
 
     # Load data
     data = ff.read_fields_masked(field_list, mask)
@@ -174,23 +277,30 @@ def plot_axial_planes_for_file(
 
     cmap = config.get("color_map", "viridis")
 
+    # replace nan values in c field and limit to positive values
+    if "c" in field_list:
+        idx = field_list.index("c")
+        data[idx] = np.nan_to_num(data[idx], nan=0)
+        data[idx] = np.maximum(data[idx], 0)
+
     # Plot fields
     for i, field in enumerate(field_list):
         logger.info(f"Plotting field {field}")
         if config.get("normalize"):
             label = proc.get_axis_label(
-                field, config.get("normalize"), config.get("use_plus")
+                field,
+                config.get("normalize"),
+                config.get("use_plus"),
+                quantity_type=config.get("quantity_type"),
             )
             if not config.get("usetex", True):
                 label = label.strip("$")
         else:
             label = field
+        z_lim = utils.get_z_limits(config, field)
+        levels = config.get("levels", 30)
         plot_field_axial_contour(
-            axs[i],
-            triang,
-            data[i],
-            label=label,
-            cmap=cmap,
+            axs[i], triang, data[i], label=label, z_lim=z_lim, cmap=cmap, levels=levels
         )
 
         conf.set_axis_limits(axs[i], config)
@@ -203,9 +313,12 @@ def plot_axial_planes_for_file(
 def plot_figure(fname, config, mesh, save_path, fig_idx, slice_type, x_target=None):
     ff = Fieldfile(fname, "r")
     figure_name = config["name"]
-    field_list = config.get("fields")
-    if field_list:
-        field_list = [f for f in field_list if f in ff.fields]
+    config_fields = config.get("fields")
+    field_list = []
+    if config_fields is None or config_fields == "all":
+        field_list = ff.fields
+    else:
+        field_list = utils.expand_field_list(config_fields, ff.fields)
 
     if slice_type == "meridional":
         n_cols = 1
@@ -218,8 +331,11 @@ def plot_figure(fname, config, mesh, save_path, fig_idx, slice_type, x_target=No
         sharex=True,
         figsize=config.get("fig_size", [8, 6]),
         dpi=config.get("dpi", 100),
-        layout="tight",
+        # layout="tight",
+        # layout="constrained",
     )
+    if isinstance(axs, plt.Axes):
+        axs = np.array([axs])
     axs = axs.flatten()
     if isinstance(config.get("title"), list):
         axs[0].set_title(rf"{config.get('title')[fig_idx]}")
@@ -232,10 +348,12 @@ def plot_figure(fname, config, mesh, save_path, fig_idx, slice_type, x_target=No
     for j in range(len(field_list), n_rows * n_cols):
         fig.delaxes(axs[j])
 
-    plt.savefig(
-        f"{save_path}/contour_{slice_type}_{figure_name}_{fig_idx}.pdf",
-        format="pdf",
-    )
+    fig.tight_layout()
+    if config.get("save_pdf", True):
+        plt.savefig(
+            f"{save_path}/contour_{slice_type}_{figure_name}_{fig_idx}.pdf",
+            format="pdf",
+        )
     plt.savefig(f"{save_path}/contour_{slice_type}_{figure_name}_{fig_idx}")
     plt.close()
 
@@ -263,3 +381,209 @@ def plot_from_config(file_names, config, save_path):
                 plot_figure(
                     fname, config, mesh, save_path, x_idx, slice_type, x_target=x_t
                 )
+
+
+def apply_z_limits(
+    ax,
+    mesh,
+    z,
+    z_lim=[None, None],
+    levels=30,
+    ticks=5,
+    auto_range_x_lim=None,
+    auto_range_y_lim=None,
+):
+    """Returns tuple of levels, norm, ticks"""
+    extend = "neither"
+    if isinstance(z_lim, list):
+        z_min = z_lim[0]
+        z_max = z_lim[1]
+        masked_min = masked_max = 0
+        if z_min is None or z_max is None:
+            if not auto_range_x_lim:
+                auto_range_x_lim = ax.get_xlim()
+            if not auto_range_y_lim:
+                auto_range_y_lim = ax.get_ylim()
+            mask = mesh.get_xy_mask(auto_range_x_lim, auto_range_y_lim)
+            masked_min = np.min(z[mask])
+            masked_max = np.max(z[mask])
+        if z_min is None:
+            z_min = np.round(masked_min, 1)
+        if z_max is None:
+            z_max = np.round(masked_max, 1)
+        if z_min >= z_max:
+            for i in range(2, 10):
+                z_min = np.round(masked_min, i)
+                z_max = np.round(masked_max, i)
+                if z_min < z_max:
+                    break
+            z_min = np.round(masked_min - 0.5 * 0.1**i, i)
+            z_max = np.round(masked_max + 0.5 * 0.1**i, i)
+        else:
+            if z_lim[0] is None:
+                z_min = np.round(masked_min - 0.05, 1)
+            if z_lim[1] is None:
+                z_max = np.round(masked_max + 0.05, 1)
+
+        if z_min < 0 and z_max > 0:
+            z_norm = np.max(np.abs([z_min, z_max]))
+            norm = colors.Normalize(vmin=-z_norm, vmax=z_norm, clip=False)
+        else:
+            norm = colors.Normalize(vmin=z_min, vmax=z_max, clip=False)
+        levels = np.linspace(z_min, z_max, levels)
+        ticks = np.linspace(z_min, z_max, 5)
+        if np.min(z) < z_min:
+            extend = "min"
+            if np.max(z) > z_max:
+                extend = "both"
+        elif np.max(z) > z_max:
+            extend = "max"
+    else:
+        norm = None
+        ticks = None
+
+    return levels, norm, ticks, extend
+
+
+def add_streamlines(
+    ax: Axes,
+    mesh: Mesh,
+    data_dict: dict[np.ndarray],
+    *,
+    data_dict2: Optional[dict[np.ndarray]] = None,
+    grid_nx: int = 300,
+    grid_ny: int = 100,
+    linewidth,
+    linewidth_by_speed: bool = False,
+    lw_scale: float = 1.0,
+    **streamplot_kwargs,
+):
+    """
+    Interpolate (u, v) defined on a Triangulation's nodes to a regular grid
+    and draw streamlines on `ax`.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Target axes.
+    triangulation : matplotlib.tri.Triangulation
+        Triangulation with node coordinates.
+    u_node, v_node : array-like, shape (n_nodes,)
+        Velocity components at the triangulation nodes (same ordering as triangulation.x/y).
+    grid_nx, grid_ny : int
+        Resolution of the regular interpolation grid.
+    density : float or (float, float)
+        Passed to `ax.streamplot` (controls streamline density).
+    color : str or None
+        Streamline color; if None and `linewidth_by_speed=True`, color is the default
+        and line width encodes speed.
+    arrowsize : float
+        Arrow size passed to `streamplot`.
+    linewidth : float or None
+        Fixed linewidth. Ignored if `linewidth_by_speed=True`.
+    linewidth_by_speed : bool
+        If True, varies linewidth with speed magnitude on the grid.
+    lw_scale : float
+        Multiplier for linewidths when `linewidth_by_speed=True`.
+
+    Returns
+    -------
+    streams : StreamplotSet
+        The object returned by `ax.streamplot`.
+    """
+    logger.info("Adding streamlines")
+    utils.check_all_key_in_all_data(["u", "v"], [data_dict])
+    u_node = data_dict["u"].flatten()
+    v_node = data_dict["v"].flatten()
+    if data_dict2 is not None:
+        u2 = data_dict2["u"].flatten()
+        v2 = -data_dict2["v"].flatten()  # inverse sign of second plane radial velocity
+        u_node = np.concatenate([u_node, u2])
+        v_node = np.concatenate([v_node, v2])
+        triang, dedup_indices = mesh.get_deduplicated_triangulation(dual=True)
+        print("got dual triang")
+    else:
+        triang, dedup_indices = mesh.get_deduplicated_triangulation()
+    x = triang.x
+    y = triang.y
+
+    # Build regular grid over the triangulation extent
+    xmin, xmax = float(np.nanmin(x)), float(np.nanmax(x))
+    ymin, ymax = float(np.nanmin(y)), float(np.nanmax(y))
+    Xg, Yg = np.meshgrid(
+        np.linspace(xmin, xmax, grid_nx),
+        np.linspace(ymin, ymax, grid_ny),
+        indexing="xy",
+    )
+    print("created meshgrid")
+
+    # Linear interpolators on the triangulation
+    u_interp = mtri.LinearTriInterpolator(triang, u_node[dedup_indices])
+    v_interp = mtri.LinearTriInterpolator(triang, v_node[dedup_indices])
+    print("created interpolators")
+
+    Ug = u_interp(Xg, Yg)
+    Vg = v_interp(Xg, Yg)
+
+    # Mask out-of-domain points (outside convex hull) -> NaNs
+    mask = np.isnan(Ug) | np.isnan(Vg)
+    if np.all(mask):
+        raise RuntimeError(
+            "Interpolation produced only NaNs; check triangulation/data."
+        )
+
+    # Optional variable linewidth by speed
+    if linewidth_by_speed:
+        speed = np.hypot(np.nan_to_num(Ug, nan=0.0), np.nan_to_num(Vg, nan=0.0))
+        # Normalize speed to [0.3, 1.0] for nicer visibility, then scale
+        smin, smax = np.nanpercentile(speed[~mask], [5, 95])
+        srange = max(smax - smin, 1e-12)
+        lw = 0.3 + 0.7 * (np.clip(speed, smin, smax) - smin) / srange
+        streamplot_kwargs["linewidth"] = lw * lw_scale
+        # When linewidth is an array, `color` must be a single value or omitted
+        if "color" in streamplot_kwargs and streamplot_kwargs["color"] is None:
+            streamplot_kwargs.pop("color")
+    elif linewidth is not None:
+        streamplot_kwargs["linewidth"] = linewidth
+
+    # Streamplot ignores NaNs internally but works best if arrays are finite
+    Ug = np.nan_to_num(Ug, nan=0.0)
+    Vg = np.nan_to_num(Vg, nan=0.0)
+
+    seeds = symmetric_seeds_from_grid(
+        Xg,
+        Yg,
+        y_fracs=(0, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95),
+        n_along=50,
+    )
+    seeds = filter_seeds_inside_triangulation(triang, seeds)
+    streamplot_kwargs["start_points"] = seeds
+    streams = ax.streamplot(Xg, Yg, Ug, Vg, **streamplot_kwargs)
+    return streams
+
+
+def symmetric_seeds_from_grid(Xg, Yg, *, y_fracs=(0.6,), n_along=25):
+    """
+    Generate symmetric start_points for streamplot from a regular grid.
+    y_fracs are fractions of the positive Y-extent (e.g. 0.6 → at 60% of ymax).
+    """
+    xmin, xmax = Xg[0, 0], Xg[0, -1]
+    ymax = np.nanmax(Yg)
+    xs = np.linspace(xmin, xmax, n_along)
+
+    seeds = []
+    for f in y_fracs:
+        y = f * ymax
+        upper = np.c_[xs, np.full_like(xs, y)]
+        lower = upper.copy()
+        lower[:, 1] *= -1
+        seeds.append(upper)
+        seeds.append(lower)
+    return np.vstack(seeds)
+
+
+# Optionally filter seeds to be inside the triangulation domain
+def filter_seeds_inside_triangulation(tri, seeds):
+    finder = tri.get_trifinder()
+    ok = finder(seeds[:, 0], seeds[:, 1]) != -1
+    return seeds[ok]

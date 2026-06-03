@@ -23,7 +23,9 @@ def interpolate_to_axial_slice(
 
     x_target = np.full_like(y_target, x_pos)
     points_target = np.column_stack((x_target, y_target))
-    if np.all(np.isclose(points_known, points_target)):
+    if np.size(points_known) == np.size(points_target) and np.all(
+        np.isclose(points_known, points_target)
+    ):
         logger.info(f"shape(interp_data): {masked_data.shape}")
         return masked_data
 
