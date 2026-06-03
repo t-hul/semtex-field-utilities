@@ -16,6 +16,7 @@ from plot_utils.plotter import plot_additions
 from semtex_fieldio.fieldfile import Fieldfile
 from semtex_fieldio.mesh import Mesh
 from semtex_fieldplot import interpolation
+from .plot_wall_traction import plot_wall_traction_from_config
 from semtex_fieldplot.plot_mesh import plot_mesh_xy, plot_mesh_xy_symm
 
 # from mpl_toolkits.axes_grid1.inset_locator import inset_axes
@@ -360,6 +361,10 @@ def plot_figure(fname, config, mesh, save_path, fig_idx, slice_type, x_target=No
 
 
 def plot_from_config(file_names, config, save_path):
+    if config.get("plot_type") == "wall_traction":
+        plot_wall_traction_from_config(file_names, config, save_path)
+        return
+
     mesh_name = config.get("mesh_file")
 
     mesh = Mesh.from_file(mesh_name)
