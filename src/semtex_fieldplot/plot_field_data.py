@@ -201,7 +201,7 @@ def plot_meridional_planes_for_file(
             auto_range_x_lim=utils.list_to_tuple(config.get("auto_range_x_lim")),
             auto_range_y_lim=utils.list_to_tuple(config.get("auto_range_y_lim")),
         )
-
+        print(f"max of field {field}: {np.max(data1[i])}")
         conf.set_axis_limits(axs[i], config)
         if scaling_params["axial_scale"][0] is not None:
             axs[i].set_xlabel(r"$x / L_\mathrm{c}$")
