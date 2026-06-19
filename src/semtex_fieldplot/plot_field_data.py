@@ -106,7 +106,8 @@ def plot_meridional_planes_for_file(
             data2 = ff.read_zplane(z_idx_2, field_names=load_fields)
             data_dict2 = ff.get_data_dict(data2, field_names=load_fields)
             data_dict2 = proc.normalize_data(
-                data_dict2, config.get("normalize"), **scaling_params
+                data_dict2, config.get("normalize"),
+                quantity_type=config.get("quantity_type"), **scaling_params
             )[0]
             data_dict2 = proc.append_calculated_data(data_dict2, **scaling_params)[0]
             data2 = np.vstack([data_dict2[name] for name in field_list])
@@ -125,8 +126,12 @@ def plot_meridional_planes_for_file(
 
         if config.get("normalize"):
             label = proc.get_axis_label(
-                field, config.get("normalize"), config.get("use_plus")
+                field,
+                config.get("normalize"),
+                config.get("use_plus"),
+                quantity_type=config.get("quantity_type"),
             )
+            # mathtex from matplotlib automatically adds '$', remove manual ones
             if not config.get("usetex", True):
                 label = label.strip("$")
         else:
@@ -189,7 +194,10 @@ def plot_axial_planes_for_file(
         logger.info(f"Plotting field {field}")
         if config.get("normalize"):
             label = proc.get_axis_label(
-                field, config.get("normalize"), config.get("use_plus")
+                field,
+                config.get("normalize"),
+                config.get("use_plus"),
+                quantity_type=config.get("quantity_type"),
             )
             if not config.get("usetex", True):
                 label = label.strip("$")
