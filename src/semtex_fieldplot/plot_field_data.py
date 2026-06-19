@@ -66,6 +66,7 @@ def plot_field_meridional_contour(
     contour = ax.tricontourf(
         triang, z[dedup_indices], levels=levels, cmap=cmap, norm=norm, extend=extend
     )
+
     ax.set_aspect("equal")
     # ax.set_title("Field Contour at z-plane")
 
@@ -262,6 +263,12 @@ def plot_axial_planes_for_file(
     print(f"shape(data): {data.shape}")
 
     cmap = config.get("color_map", "viridis")
+
+    # replace nan values in c field and limit to positive values
+    if "c" in field_list:
+        idx = field_list.index("c")
+        data[idx] = np.nan_to_num(data[idx], nan=0)
+        data[idx] = np.maximum(data[idx], 0)
 
     # Plot fields
     for i, field in enumerate(field_list):
