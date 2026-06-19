@@ -332,7 +332,8 @@ def plot_figure(fname, config, mesh, save_path, fig_idx, slice_type, x_target=No
         sharex=True,
         figsize=config.get("fig_size", [8, 6]),
         dpi=config.get("dpi", 100),
-        layout="tight",
+        # layout="tight",
+        # layout="constrained",
     )
     if isinstance(axs, plt.Axes):
         axs = np.array([axs])
@@ -348,10 +349,12 @@ def plot_figure(fname, config, mesh, save_path, fig_idx, slice_type, x_target=No
     for j in range(len(field_list), n_rows * n_cols):
         fig.delaxes(axs[j])
 
-    plt.savefig(
-        f"{save_path}/contour_{slice_type}_{figure_name}_{fig_idx}.pdf",
-        format="pdf",
-    )
+    fig.tight_layout()
+    if config.get("save_pdf", True):
+        plt.savefig(
+            f"{save_path}/contour_{slice_type}_{figure_name}_{fig_idx}.pdf",
+            format="pdf",
+        )
     plt.savefig(f"{save_path}/contour_{slice_type}_{figure_name}_{fig_idx}")
     plt.close()
 
