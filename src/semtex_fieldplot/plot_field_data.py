@@ -45,11 +45,13 @@ def plot_field_meridional_contour(
         if field_zplane_2 is not None:
             z2 = field_zplane_2.flatten()
             z = np.concatenate([z, z2])
-            triang = mesh.get_triangulation(dual=True)
+            # triang = mesh.get_triangulation(dual=True)
+            triang, dedup_indices = mesh.get_deduplicated_triangulation(dual=True)
         else:
-            triang = mesh.get_triangulation()
-    except:
-        raise RuntimeError("Error getting triangulation")
+            # triang = mesh.get_triangulation()
+            triang, dedup_indices = mesh.get_deduplicated_triangulation()
+    except Exception as e:
+        raise RuntimeError(f"Error getting triangulation: {e}")
 
     logger.debug(f"len(z): {len(z)}")
     levels, norm, ticks, extend = apply_z_limits(
@@ -217,7 +219,7 @@ def plot_axial_planes_for_file(
     logger.info(f"Plotting axial slice at x = {x_target}")
 
     mask, r_target = mesh.axial_node_mask_with_r(x_target, tol=0.25)
-    triang = mesh.triangulate_axial_slice(r_target)
+    triang = mesh.triangulate_axial_slice(x_target, r_target)
 
     # Load data
     data = ff.read_fields_masked(field_list, mask)
