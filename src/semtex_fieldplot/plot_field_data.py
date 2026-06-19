@@ -78,15 +78,20 @@ def plot_meridional_planes_for_file(
         raise RuntimeError("Geometry mismatch")
 
     # Load data
+    load_fields = utils.get_needed_fields(field_list, ff.fields)
     z_idx = config.get("plane_index", 0)
-    data1 = ff.read_zplane(z_idx, field_names=field_list)
-    data_dict = ff.get_data_dict(data1, field_names=field_list)
+    data1 = ff.read_zplane(z_idx, field_names=load_fields)
+    data_dict = ff.get_data_dict(data1, field_names=load_fields)
 
     # Normalization
     scaling_params = utils.get_scaling_parameters(config, None, 1)
     data_dict = proc.normalize_data(
-        data_dict, config.get("normalize"), **scaling_params
+        data_dict,
+        config.get("normalize"),
+        quantity_type=config.get("quantity_type"),
+        **scaling_params,
     )[0]
+    data_dict = proc.append_calculated_data(data_dict, **scaling_params)[0]
     data1 = np.vstack([data_dict[name] for name in field_list])
 
     cmap = config.get("color_map", "viridis")
@@ -95,16 +100,21 @@ def plot_meridional_planes_for_file(
     if config.get("dual_plane", False):
         if ff.geometry.nz == 1:
             data2 = data1
+            data_dict2 = data_dict
         else:
             z_idx_2 = (z_idx + ff.geometry.nz // 2) % ff.geometry.nz
-            data2 = ff.read_zplane(z_idx_2, field_names=field_list)
-            data_dict2 = ff.get_data_dict(data2, field_names=field_list)
+            data2 = ff.read_zplane(z_idx_2, field_names=load_fields)
+            data_dict2 = ff.get_data_dict(data2, field_names=load_fields)
             data_dict2 = proc.normalize_data(
                 data_dict2, config.get("normalize"), **scaling_params
             )[0]
+            data_dict2 = proc.append_calculated_data(data_dict2, **scaling_params)[0]
             data2 = np.vstack([data_dict2[name] for name in field_list])
     else:
         data2 = None
+        data_dict2 = None
+        if not field_list and config.get("plot_mesh"):
+            plot_mesh_xy(axs[0], mesh, only_elements=True)
 
     # Plot fields
     for i, field in enumerate(field_list):
@@ -203,9 +213,12 @@ def plot_axial_planes_for_file(
 def plot_figure(fname, config, mesh, save_path, fig_idx, slice_type, x_target=None):
     ff = Fieldfile(fname, "r")
     figure_name = config["name"]
-    field_list = config.get("fields")
-    if field_list:
-        field_list = [f for f in field_list if f in ff.fields]
+    config_fields = config.get("fields")
+    field_list = []
+    if config_fields is None or config_fields == "all":
+        field_list = ff.fields
+    else:
+        field_list = utils.expand_field_list(config_fields, ff.fields)
 
     if slice_type == "meridional":
         n_cols = 1
