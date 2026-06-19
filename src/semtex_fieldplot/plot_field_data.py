@@ -16,7 +16,14 @@ logger = logging.getLogger(__name__)
 
 
 def plot_field_meridional_contour(
-    ax, mesh, field_zplane_1, field_zplane_2=None, levels=30, cmap="viridis", label=None
+    ax,
+    mesh: Mesh,
+    field_zplane_1: np.ndarray,
+    field_zplane_2=None,
+    levels=30,
+    z_lim=[None, None],
+    cmap="viridis",
+    label=None,
 ):
     logger.info(f"Plotting field data with label {label}")
     nel, ns, nr = mesh.geometry.nel, mesh.geometry.ns, mesh.geometry.nr
@@ -34,7 +41,18 @@ def plot_field_meridional_contour(
         raise RuntimeError("Error getting triangulation")
 
     logger.debug(f"len(z): {len(z)}")
-    contour = ax.tricontourf(triang, z, levels=levels, cmap=cmap)
+    levels, norm, ticks, extend = apply_z_limits(
+        ax,
+        mesh,
+        z,
+        z_lim,
+        levels,
+        auto_range_x_lim=auto_range_x_lim,
+        auto_range_y_lim=auto_range_y_lim,
+    )
+    contour = ax.tricontourf(
+        triang, z[dedup_indices], levels=levels, cmap=cmap, norm=norm, extend=extend
+    )
     ax.set_aspect("equal")
     # ax.set_title("Field Contour at z-plane")
 
@@ -45,17 +63,28 @@ def plot_field_meridional_contour(
     # plt.grid(True)
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="3%", pad=0.1)
-    plt.colorbar(contour, cax=cax, label=rf"${label}$")
+    ax.figure.colorbar(
+        contour, cax=cax, label=rf"${label}$", ticks=ticks, extend=extend
+    )
 
 
 def plot_field_axial_contour(
-    ax, triang, field_data, levels=30, cmap="viridis", label=None
+    ax,
+    triang,
+    field_data: np.ndarray,
+    levels=30,
+    z_lim=[None, None],
+    cmap="viridis",
+    label=None,
 ):
     logger.info(f"Plotting field data with label {label}")
 
     z = field_data.flatten()
 
-    contour = ax.tricontourf(triang, z, levels=levels, cmap=cmap)
+    levels, norm, ticks, extend = apply_z_limits(z, z_lim, levels)
+    contour = ax.tricontourf(
+        triang, z, levels=levels, cmap=cmap, norm=norm, extend=extend
+    )
     ax.set_aspect("equal")
     # ax.set_title("Field Contour at z-plane")
 
@@ -66,7 +95,7 @@ def plot_field_axial_contour(
     # plt.grid(True)
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.1)
-    plt.colorbar(contour, cax=cax, label=rf"${label}$")
+    plt.colorbar(contour, cax=cax, label=rf"${label}$", ticks=ticks, extend=extend)
 
 
 def plot_meridional_planes_for_file(
@@ -136,13 +165,21 @@ def plot_meridional_planes_for_file(
                 label = label.strip("$")
         else:
             label = field
+
+        z_lim = utils.get_z_limits(config, field)
+
+        levels = config.get("levels", 30)
         plot_field_meridional_contour(
             axs[i],
             mesh,
             data1[i],
             field_zplane_2=d2,
             label=label,
+            z_lim=z_lim,
             cmap=cmap,
+            levels=levels,
+            auto_range_x_lim=utils.list_to_tuple(config.get("auto_range_x_lim")),
+            auto_range_y_lim=utils.list_to_tuple(config.get("auto_range_y_lim")),
         )
 
         conf.set_axis_limits(axs[i], config)
@@ -203,12 +240,10 @@ def plot_axial_planes_for_file(
                 label = label.strip("$")
         else:
             label = field
+        z_lim = utils.get_z_limits(config, field)
+        levels = config.get("levels", 30)
         plot_field_axial_contour(
-            axs[i],
-            triang,
-            data[i],
-            label=label,
-            cmap=cmap,
+            axs[i], triang, data[i], label=label, z_lim=z_lim, cmap=cmap, levels=levels
         )
 
         conf.set_axis_limits(axs[i], config)
@@ -284,3 +319,67 @@ def plot_from_config(file_names, config, save_path):
                 plot_figure(
                     fname, config, mesh, save_path, x_idx, slice_type, x_target=x_t
                 )
+
+
+def apply_z_limits(
+    ax,
+    mesh,
+    z,
+    z_lim=[None, None],
+    levels=30,
+    ticks=5,
+    auto_range_x_lim=None,
+    auto_range_y_lim=None,
+):
+    """Returns tuple of levels, norm, ticks"""
+    extend = "neither"
+    if isinstance(z_lim, list):
+        z_min = z_lim[0]
+        z_max = z_lim[1]
+        masked_min = masked_max = 0
+        if z_min is None or z_max is None:
+            if not auto_range_x_lim:
+                auto_range_x_lim = ax.get_xlim()
+            if not auto_range_y_lim:
+                auto_range_y_lim = ax.get_ylim()
+            mask = mesh.get_xy_mask(auto_range_x_lim, auto_range_y_lim)
+            masked_min = np.min(z[mask])
+            masked_max = np.max(z[mask])
+        if z_min is None:
+            z_min = np.round(masked_min, 1)
+        if z_max is None:
+            z_max = np.round(masked_max, 1)
+        if z_min >= z_max:
+            for i in range(2, 10):
+                z_min = np.round(masked_min, i)
+                z_max = np.round(masked_max, i)
+                if z_min < z_max:
+                    break
+            z_min = np.round(masked_min - 0.5 * 0.1**i, i)
+            z_max = np.round(masked_max + 0.5 * 0.1**i, i)
+        else:
+            if z_lim[0] is None:
+                z_min = np.round(masked_min - 0.05, 1)
+            if z_lim[1] is None:
+                z_max = np.round(masked_max + 0.05, 1)
+
+        if z_min < 0 and z_max > 0:
+            z_norm = np.max(np.abs([z_min, z_max]))
+            norm = colors.Normalize(vmin=-z_norm, vmax=z_norm, clip=False)
+        else:
+            norm = colors.Normalize(vmin=z_min, vmax=z_max, clip=False)
+        levels = np.linspace(z_min, z_max, levels)
+        ticks = np.linspace(z_min, z_max, 5)
+        if np.min(z) < z_min:
+            extend = "min"
+            if np.max(z) > z_max:
+                extend = "both"
+        elif np.max(z) > z_max:
+            extend = "max"
+    else:
+        norm = None
+        ticks = None
+
+    return levels, norm, ticks, extend
+
+
