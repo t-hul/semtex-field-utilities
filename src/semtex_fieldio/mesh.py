@@ -18,7 +18,13 @@ class Mesh:
     _triangulation: Optional[tri.Triangulation] = field(
         default=None, init=False, repr=False, compare=False
     )
+    _deduped_triangulation: Optional[tri.Triangulation] = field(
+        default=None, init=False, repr=False, compare=False
+    )
+    _dedup_indices: Optional[np.ndarray] = None
     _is_dual: bool = False
+    _x_normalized: bool = False
+    _y_normalized: bool = False
 
     @classmethod
     def from_file(cls, path: str) -> "Mesh":
@@ -71,8 +77,8 @@ class Mesh:
         self._is_dual = dual
 
         # Mask poorly shaped or boundary triangles
-        # mask = tri.TriAnalyzer(self._triangulation).get_flat_tri_mask(0.01)
-        # self._triangulation.set_mask(mask)
+        mask = tri.TriAnalyzer(self._triangulation).get_flat_tri_mask(0.01)
+        self._triangulation.set_mask(mask)
 
     def get_triangulation(self, dual=False) -> tri.Triangulation:
         if self._triangulation is None:
@@ -81,10 +87,50 @@ class Mesh:
             self.triangulate(dual=dual)
         return self._triangulation
 
-    def triangulate_axial_slice(self, r_target: np.ndarray) -> tri.Triangulation:
+    def get_deduplicated_triangulation(self, dual=False) -> tri.Triangulation:
+        """
+        Returns a deduplicated meridional triangulation suitable for spatial queries.
+        """
+        if self._deduped_triangulation is not None and self._is_dual == dual:
+            return self._deduped_triangulation, self._dedup_indices
+
+        points = self.xy[..., :2].reshape(-1, 2)  # nel*ns*nr, 2
+        if dual:
+            offset = points.shape[0]
+            points = np.concatenate(
+                [points, np.stack([points[:, 0], -points[:, 1]], axis=1)]
+            )
+        points = np.round(points, decimals=10)
+        unique_points, dedup_indices, inverse_indices = np.unique(
+            points, axis=0, return_index=True, return_inverse=True
+        )
+        self._dedup_indices = dedup_indices
+        raw_triangles = self._build_element_triangles()
+        if dual:
+            # add mirrored triangles, add offset of duplicated nodes
+            raw_triangles = np.concatenate(
+                [raw_triangles, raw_triangles[:, [0, 2, 1]] + offset]
+            )
+        triangles_deduped = inverse_indices[raw_triangles]
+
+        self._deduped_triangulation = tri.Triangulation(
+            unique_points[:, 0], unique_points[:, 1], triangles_deduped
+        )
+        self._is_dual = dual
+
+        # Mask poorly shaped or boundary triangles
+        # mask = tri.TriAnalyzer(triang).get_flat_tri_mask(0.01)
+        # triang.set_mask(mask)
+
+        return self._deduped_triangulation, dedup_indices
+
+    def triangulate_axial_slice(
+        self, x_target: float, r_target: np.ndarray
+    ) -> tri.Triangulation:
         theta = self.theta[:-1]  # shape: (nz,)
         nz = len(theta)
         nr = len(r_target)
+        logger.debug(f"shape(r_target): {r_target.shape}")
 
         # Structured grid (theta varies along axis=0, r along axis=1)
         Theta, R = np.meshgrid(theta, r_target, indexing="ij")  # shape: (nz, nr)
@@ -108,7 +154,28 @@ class Mesh:
                 triangles.append([n0, n1, n2])
                 triangles.append([n0, n2, n3])
 
-        triang = tri.Triangulation(y_flat, z_flat, triangles=np.array(triangles))
+        triangles = np.array(triangles)
+        triang = tri.Triangulation(y_flat, z_flat, triangles=triangles)
+
+        # for x < 1 check if triangles are between elements, use meridional triangulation
+        if x_target < 1:
+            meridional_triang = self.get_deduplicated_triangulation()
+            logger.info("Got meridional triang")
+            finder = meridional_triang.get_trifinder()
+            logger.info("Got triFinder")
+
+            # center radius
+            R = R.flatten()
+            rc = (R[triangles[:, 0]] + R[triangles[:, 1]] + R[triangles[:, 2]]) / 3
+
+            inside = (
+                finder(np.full_like(rc, x_target), rc) >= 0
+            )  # returns -1 if point is outside
+            mask = ~inside
+
+            logger.info(f"Masking {np.count_nonzero(mask)} triangles")
+            triang.set_mask(mask)
+
         logger.info(f"Created triangulation of axial slice with {len(y_flat)} points")
         return triang
 
@@ -174,8 +241,12 @@ class Mesh:
                 exact = np.isclose(diffs, 0.0)
                 if np.any(exact):
                     r_idx = np.where(exact)
+                    # skip if already in list (e.g element edges)
+                    if r_line[r_idx] in r_target_list:
+                        continue
                     mask[e, s, r_idx] = True
                     r_target_list.append(r_line[r_idx])
+                    logger.debug(f"exact match at r[{r_idx}] = {r_line[r_idx]}")
                     continue
 
                 # Otherwise, find one node below and one above
@@ -198,6 +269,55 @@ class Mesh:
                 mask[e, s, i_below] = True
                 mask[e, s, i_above] = True
                 r_target_list.append(r_interp)
+                logger.debug(f"interpolated at r[{i_below} .. {i_above}] = {r_interp}")
 
         r_target = np.array(r_target_list)
         return mask, r_target
+
+    def normalize(self, axial_scale=None, radius_scale=None, **kwargs):
+        if self._x_normalized and self._y_normalized:
+            return
+        if axial_scale is None and radius_scale is None:
+            return
+        if axial_scale is not None and not self._x_normalized:
+            self.xy[..., 0] /= axial_scale
+            self._x_normalized = True
+
+        if radius_scale is not None and not self._y_normalized:
+            self.xy[..., 1] /= radius_scale
+            self._y_normalized = True
+
+    def is_normalized(self, dir="both"):
+        if dir == "both":
+            return self._x_normalized and self._y_normalized
+        if dir in ["x", "axial"]:
+            return self._x_normalized
+        if dir in ["y", "r", "radius"]:
+            return self._y_normalized
+
+    def get_xy_mask(
+        self, xlim: tuple[float, float], ylim: tuple[float, float]
+    ) -> np.ndarray:
+        """
+        Create a mask for points within the given x and y limits.
+
+        Parameters
+        ----------
+        xlim : tuple of float
+            (xmin, xmax) range for x.
+        ylim : tuple of float
+            (ymin, ymax) range for y.
+
+        Returns
+        -------
+        mask : np.ndarray of bool
+            Boolean mask with shape (nel*ns*nr,), True if point lies within limits.
+        """
+        x = self.xy[..., 0].ravel()
+        y = self.xy[..., 1].ravel()
+
+        mask_x = (x >= xlim[0]) & (x <= xlim[1])
+        mask_y = (y >= ylim[0]) & (y <= ylim[1])
+        if self._is_dual:
+            return np.concatenate([mask_x & mask_y, mask_x & mask_y])
+        return mask_x & mask_y
