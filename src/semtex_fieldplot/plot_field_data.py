@@ -70,9 +70,6 @@ def plot_field_meridional_contour(
     # ax.set_title("Field Contour at z-plane")
 
     # Create colorbar axis that matches the height of the main axis
-    ax.set_xlabel(r"$x$")
-    ax.set_ylabel(r"$r$")
-
     # plt.grid(True)
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="3%", pad=0.1)
@@ -126,7 +123,16 @@ def plot_meridional_planes_for_file(
     data_dict = ff.get_data_dict(data1, field_names=load_fields)
 
     # Normalization
+    # aspect_ratio = 1.0
     scaling_params = utils.get_scaling_parameters(config, None, 1)
+    # mesh.normalize(**scaling_params)
+    # if (
+    #     scaling_params["axial_scale"][0] is not None
+    #     and scaling_params["radius_scale"][0] is not None
+    # ):
+    #     aspect_ratio = (
+    #         scaling_params["radius_scale"][0] / scaling_params["axial_scale"][0]
+    #     )
     data_dict = proc.normalize_data(
         data_dict,
         config.get("normalize"),
@@ -196,6 +202,24 @@ def plot_meridional_planes_for_file(
         )
 
         conf.set_axis_limits(axs[i], config)
+        if scaling_params["axial_scale"][0] is not None:
+            axs[i].set_xlabel(r"$x / L_\mathrm{c}$")
+            x_scale = scaling_params["axial_scale"][0]
+            axs[i].xaxis.set_major_formatter(
+                FuncFormatter(lambda v, _: f"{v/x_scale:g}")
+            )
+            axs[i].xaxis.set_major_locator(MultipleLocator(base=0.25 * x_scale))
+        else:
+            axs[i].set_xlabel(r"$x$")
+        if scaling_params["radius_scale"][0] is not None:
+            axs[i].set_ylabel(r"$r / R$")
+            y_scale = scaling_params["radius_scale"][0]
+            axs[i].yaxis.set_major_formatter(
+                FuncFormatter(lambda v, _: f"{v/y_scale:g}")
+            )
+            axs[i].yaxis.set_major_locator(MultipleLocator(base=0.5 * y_scale))
+        else:
+            axs[i].set_ylabel(r"$r$")
 
         if config.get("plot_mesh"):
             plot_mesh_xy_symm(axs[i], mesh, only_elements=True)
@@ -289,6 +313,8 @@ def plot_figure(fname, config, mesh, save_path, fig_idx, slice_type, x_target=No
         dpi=config.get("dpi", 100),
         layout="tight",
     )
+    if isinstance(axs, plt.Axes):
+        axs = np.array([axs])
     axs = axs.flatten()
     if isinstance(config.get("title"), list):
         axs[0].set_title(rf"{config.get('title')[fig_idx]}")
