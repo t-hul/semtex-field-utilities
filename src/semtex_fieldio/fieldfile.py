@@ -161,7 +161,10 @@ class Fieldfile:
                 f.seek(offset + hdr_off)
                 buf = f.read(ntot_z * 8)
                 result.append(np.frombuffer(buf, dtype=np.float64))
-                logger.debug(f"Read plane {z_idx} of field {name} with {ntot_z} bytes")
+                if z_idx < 10 or self.geometry.nz - z_idx < 10:
+                    logger.debug(
+                        f"Read plane {z_idx} of field {name} with {ntot_z} bytes"
+                    )
 
         return np.stack(result)  # shape: (nfields, ntot_z)
 
