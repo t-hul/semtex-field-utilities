@@ -1,16 +1,25 @@
 import logging
+from typing import Optional  # , Tuple, Union
 
+import matplotlib.colors as colors
 import matplotlib.pyplot as plt
+import matplotlib.tri as mtri
 import numpy as np
 import plot_utils.config as conf
 import plot_utils.processor as proc
 import plot_utils.utils as utils
+from matplotlib.axes import Axes
+from matplotlib.ticker import FuncFormatter, MultipleLocator
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from plot_utils.plotter import plot_additions
 
 from semtex_fieldio.fieldfile import Fieldfile
 from semtex_fieldio.mesh import Mesh
 from semtex_fieldplot import interpolation
 from semtex_fieldplot.plot_mesh import plot_mesh_xy, plot_mesh_xy_symm
+
+# from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +33,8 @@ def plot_field_meridional_contour(
     z_lim=[None, None],
     cmap="viridis",
     label=None,
+    auto_range_x_lim=None,
+    auto_range_y_lim=None,
 ):
     logger.info(f"Plotting field data with label {label}")
     nel, ns, nr = mesh.geometry.nel, mesh.geometry.ns, mesh.geometry.nr
