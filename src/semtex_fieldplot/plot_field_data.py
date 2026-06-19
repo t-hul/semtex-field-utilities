@@ -222,10 +222,24 @@ def plot_meridional_planes_for_file(
         else:
             axs[i].set_ylabel(r"$r$")
 
+        if config.get("streamlines") and i == 0:
+            add_streamlines(
+                axs[i],
+                mesh,
+                data_dict,
+                data_dict2=data_dict2,
+                density=(2.5, 0.75),
+                linewidth=0.5,
+                color="black",
+                arrowsize=0.5,
+            )
+
         if config.get("plot_mesh"):
             plot_mesh_xy_symm(axs[i], mesh, only_elements=True)
         if i < len(field_list) - 1:
             axs[i].set_xlabel("")
+
+        plot_additions(axs[i], config)
 
 
 def plot_axial_planes_for_file(
@@ -429,3 +443,145 @@ def apply_z_limits(
     return levels, norm, ticks, extend
 
 
+def add_streamlines(
+    ax: Axes,
+    mesh: Mesh,
+    data_dict: dict[np.ndarray],
+    *,
+    data_dict2: Optional[dict[np.ndarray]] = None,
+    grid_nx: int = 300,
+    grid_ny: int = 100,
+    linewidth,
+    linewidth_by_speed: bool = False,
+    lw_scale: float = 1.0,
+    **streamplot_kwargs,
+):
+    """
+    Interpolate (u, v) defined on a Triangulation's nodes to a regular grid
+    and draw streamlines on `ax`.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Target axes.
+    triangulation : matplotlib.tri.Triangulation
+        Triangulation with node coordinates.
+    u_node, v_node : array-like, shape (n_nodes,)
+        Velocity components at the triangulation nodes (same ordering as triangulation.x/y).
+    grid_nx, grid_ny : int
+        Resolution of the regular interpolation grid.
+    density : float or (float, float)
+        Passed to `ax.streamplot` (controls streamline density).
+    color : str or None
+        Streamline color; if None and `linewidth_by_speed=True`, color is the default
+        and line width encodes speed.
+    arrowsize : float
+        Arrow size passed to `streamplot`.
+    linewidth : float or None
+        Fixed linewidth. Ignored if `linewidth_by_speed=True`.
+    linewidth_by_speed : bool
+        If True, varies linewidth with speed magnitude on the grid.
+    lw_scale : float
+        Multiplier for linewidths when `linewidth_by_speed=True`.
+
+    Returns
+    -------
+    streams : StreamplotSet
+        The object returned by `ax.streamplot`.
+    """
+    logger.info("Adding streamlines")
+    utils.check_all_key_in_all_data(["u", "v"], [data_dict])
+    u_node = data_dict["u"].flatten()
+    v_node = data_dict["v"].flatten()
+    if data_dict2 is not None:
+        u2 = data_dict2["u"].flatten()
+        v2 = -data_dict2["v"].flatten()  # inverse sign of second plane radial velocity
+        u_node = np.concatenate([u_node, u2])
+        v_node = np.concatenate([v_node, v2])
+        triang, dedup_indices = mesh.get_deduplicated_triangulation(dual=True)
+        print("got dual triang")
+    else:
+        triang, dedup_indices = mesh.get_deduplicated_triangulation()
+    x = triang.x
+    y = triang.y
+
+    # Build regular grid over the triangulation extent
+    xmin, xmax = float(np.nanmin(x)), float(np.nanmax(x))
+    ymin, ymax = float(np.nanmin(y)), float(np.nanmax(y))
+    Xg, Yg = np.meshgrid(
+        np.linspace(xmin, xmax, grid_nx),
+        np.linspace(ymin, ymax, grid_ny),
+        indexing="xy",
+    )
+    print("created meshgrid")
+
+    # Linear interpolators on the triangulation
+    u_interp = mtri.LinearTriInterpolator(triang, u_node[dedup_indices])
+    v_interp = mtri.LinearTriInterpolator(triang, v_node[dedup_indices])
+    print("created interpolators")
+
+    Ug = u_interp(Xg, Yg)
+    Vg = v_interp(Xg, Yg)
+
+    # Mask out-of-domain points (outside convex hull) -> NaNs
+    mask = np.isnan(Ug) | np.isnan(Vg)
+    if np.all(mask):
+        raise RuntimeError(
+            "Interpolation produced only NaNs; check triangulation/data."
+        )
+
+    # Optional variable linewidth by speed
+    if linewidth_by_speed:
+        speed = np.hypot(np.nan_to_num(Ug, nan=0.0), np.nan_to_num(Vg, nan=0.0))
+        # Normalize speed to [0.3, 1.0] for nicer visibility, then scale
+        smin, smax = np.nanpercentile(speed[~mask], [5, 95])
+        srange = max(smax - smin, 1e-12)
+        lw = 0.3 + 0.7 * (np.clip(speed, smin, smax) - smin) / srange
+        streamplot_kwargs["linewidth"] = lw * lw_scale
+        # When linewidth is an array, `color` must be a single value or omitted
+        if "color" in streamplot_kwargs and streamplot_kwargs["color"] is None:
+            streamplot_kwargs.pop("color")
+    elif linewidth is not None:
+        streamplot_kwargs["linewidth"] = linewidth
+
+    # Streamplot ignores NaNs internally but works best if arrays are finite
+    Ug = np.nan_to_num(Ug, nan=0.0)
+    Vg = np.nan_to_num(Vg, nan=0.0)
+
+    seeds = symmetric_seeds_from_grid(
+        Xg,
+        Yg,
+        y_fracs=(0, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95),
+        n_along=50,
+    )
+    seeds = filter_seeds_inside_triangulation(triang, seeds)
+    streamplot_kwargs["start_points"] = seeds
+    streams = ax.streamplot(Xg, Yg, Ug, Vg, **streamplot_kwargs)
+    return streams
+
+
+def symmetric_seeds_from_grid(Xg, Yg, *, y_fracs=(0.6,), n_along=25):
+    """
+    Generate symmetric start_points for streamplot from a regular grid.
+    y_fracs are fractions of the positive Y-extent (e.g. 0.6 → at 60% of ymax).
+    """
+    xmin, xmax = Xg[0, 0], Xg[0, -1]
+    ymax = np.nanmax(Yg)
+    xs = np.linspace(xmin, xmax, n_along)
+
+    seeds = []
+    for f in y_fracs:
+        y = f * ymax
+        upper = np.c_[xs, np.full_like(xs, y)]
+        lower = upper.copy()
+        lower[:, 1] *= -1
+        seeds.append(upper)
+        seeds.append(lower)
+    return np.vstack(seeds)
+
+
+# Optionally filter seeds to be inside the triangulation domain
+def filter_seeds_inside_triangulation(tri, seeds):
+    finder = tri.get_trifinder()
+    ok = finder(seeds[:, 0], seeds[:, 1]) != -1
+    return seeds[ok]
