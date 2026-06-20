@@ -10,6 +10,10 @@ from .geometry import Geometry
 logger = logging.getLogger(__name__)
 
 
+class MeshFileError(ValueError):
+    pass
+
+
 @dataclass
 class Mesh:
     geometry: Geometry
@@ -42,19 +46,29 @@ class Mesh:
             n_points_per_plane = nel * ns * nr
 
             # Read x, y coordinates (assume each line is: x y)
-            xy_data = np.loadtxt(f, max_rows=n_points_per_plane)
+            try:
+                xy_data = np.loadtxt(f, max_rows=n_points_per_plane)
+            except ValueError as err:
+                raise MeshFileError(
+                    "Failed to read XY data. "
+                    "The mesh header may be incorrect or the file may be corrupted."
+                ) from err
             if xy_data.shape != (n_points_per_plane, 2):
                 raise ValueError(
                     f"Expected ({n_points_per_plane}, 2) xy values, got {xy_data.shape}"
                 )
-
-            # Reshape to (nel, ns, nr, 2)
             xy = xy_data.reshape(nel, ns, nr, 2)
 
             # Read theta values for each z-plane
-            theta_data = np.loadtxt(f)
+            try:
+                theta_data = np.loadtxt(f)
+            except ValueError as err:
+                raise MeshFileError(
+                    "Failed to read theta/Z data. "
+                    "The mesh header may be incorrect or the file may be corrupted."
+                ) from err
             if theta_data.size != nz + 1:
-                raise ValueError(
+                raise MeshFileError(
                     f"Expected {nz + 1} theta values, got {theta_data.size}"
                 )
 
