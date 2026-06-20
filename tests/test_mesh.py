@@ -38,3 +38,8 @@ class TestMeshFromFile(TestCase):
         mesh_path = Path(__file__).parent / "data" / "koal1_wrong_header_nel.msh"
         self.assertRaisesRegex(MeshFileError, "Failed to read XY data",
                                Mesh.from_file, mesh_path)
+
+    def test_truncated_mesh(self):
+        mesh_path = Path(__file__).parent / "data" / "koal1_truncated.msh"
+        self.assertRaisesRegex(
+            MeshFileError, "xy values", Mesh.from_file, mesh_path)

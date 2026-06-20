@@ -54,7 +54,7 @@ class Mesh:
                     "The mesh header may be incorrect or the file may be corrupted."
                 ) from err
             if xy_data.shape != (n_points_per_plane, 2):
-                raise ValueError(
+                raise MeshFileError(
                     f"Expected ({n_points_per_plane}, 2) xy values, got {xy_data.shape}"
                 )
             xy = xy_data.reshape(nel, ns, nr, 2)
