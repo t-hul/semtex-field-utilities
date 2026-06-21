@@ -141,3 +141,50 @@ def write_vtu(grid: pv.UnstructuredGrid, filename: str | Path):
     filename.parent.mkdir(parents=True, exist_ok=True)
 
     grid.save(filename)
+
+
+def mesh_to_structured_block(mesh: Mesh, element_id: int) -> pv.StructuredGrid:
+    """Convert Semtex mesh points to VTK Cartesian points of a given element
+    and create a structured grid of the element x nz planes.
+    """
+    xy = mesh.xy
+    theta = mesh.theta[:-1]
+
+    _, ns, nr, _ = xy.shape
+    nz = len(theta)
+
+    points = np.empty((nz, ns, nr, 3), dtype=float)
+
+    x = xy[element_id, ..., 0]
+    r = xy[element_id, ..., 1]
+
+    for k, th in enumerate(theta):
+        if like_tec:
+            points[k, ..., 0] = -x
+            points[k, ..., 1] = r * np.sin(th)
+            points[k, ..., 2] = r * np.cos(th)
+        else:
+            points[k, ..., 0] = x
+            points[k, ..., 1] = r * np.cos(th)
+            points[k, ..., 2] = r * np.sin(th)
+
+    return pv.StructuredGrid(points[:, 0], points[:, 1], points[:, 2])
+
+
+def field_to_block_point_data(fieldfile: Fieldfile, element_id: int):
+    ...
+
+
+def semtex_to_multiblock(mesh: Mesh, fieldfile: Fieldfile) -> pv.MultiBlock:
+    ...
+
+
+def write_vtm(blocks: pv.MultiBlock, filename: str | Path):
+    """Write PyVista multiblock to a VTM file"""
+    filename = Path(filename)
+
+    if filename.suffix != ".vtm":
+        filename = filename.with_suffix(".vtm")
+    filename.parent.mkdir(parents=True, exist_ok=True)
+
+    blocks.save(filename)
