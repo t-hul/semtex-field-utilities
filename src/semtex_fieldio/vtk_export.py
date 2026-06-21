@@ -104,6 +104,9 @@ def mesh_to_vtk_cells(mesh: Mesh) -> tuple[np.ndarray, np.ndarray]:
 
 def field_to_point_data(fieldfile: Fieldfile) -> dict[str, np.ndarray]:
     """Return field arrays aligned with mesh_to_vtk_points ordering."""
+    if fieldfile.data is None:
+        fieldfile.read_all_data()
+    return fieldfile.get_data_dict(fieldfile.data)
 
 
 def semtex_to_unstructured_grid(mesh: Mesh, fieldfile: Fieldfile) -> pv.UnstructuredGrid:
@@ -113,6 +116,10 @@ def semtex_to_unstructured_grid(mesh: Mesh, fieldfile: Fieldfile) -> pv.Unstruct
     grid = pv.UnstructuredGrid(cells, celltypes, points)
 
     for name, values in field_to_point_data(fieldfile).items():
+        if values.shape[0] != grid.n_points:
+            raise ValueError(
+                f"Field {name} has {values.shape[0]} values, "
+                f"but grid has {grid.n_points} points.")
         grid.point_data[name] = values
 
     return grid
