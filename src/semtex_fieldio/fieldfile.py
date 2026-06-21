@@ -173,10 +173,15 @@ class Fieldfile:
     ) -> dict[np.ndarray]:
         if field_names is None:
             field_names = self.fields
-        if len(field_names) != data.shape[0]:
+        if data.shape[0] != len(field_names):
             raise ValueError(
                 f"Number of field names ({len(field_names)}) not equal to data.shape[0] ({data.shape[0]})"
             )
+        if data.shape[1] != self.npoints:
+            raise ValueError(
+                f"Data fields have {data.shape[1]} values, expected {self.npoints}"
+            )
+
         data_dict = {}
         for i, key in enumerate(field_names):
             data_dict[key] = data[i, ...]
