@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import numpy as np
 import pyvista as pv
+from pathlib import Path
 
 from .mesh import Mesh
 from .fieldfile import Fieldfile
 
 
-def mesh_to_vtk_points(mesh: Mesh) -> np.ndarray:
+def mesh_to_vtk_points(mesh: Mesh, like_tec: bool = False) -> np.ndarray:
     """Convert Semtex mesh points to VTK Cartesian points.
 
     Returns
@@ -27,9 +28,14 @@ def mesh_to_vtk_points(mesh: Mesh) -> np.ndarray:
     r = xy[..., 1]
 
     for k, th in enumerate(theta):
-        points[k, ..., 0] = x
-        points[k, ..., 1] = r * np.cos(th)
-        points[k, ..., 2] = r * np.sin(th)
+        if like_tec:
+            points[k, ..., 0] = -x
+            points[k, ..., 1] = r * np.sin(th)
+            points[k, ..., 2] = r * np.cos(th)
+        else:
+            points[k, ..., 0] = x
+            points[k, ..., 1] = r * np.cos(th)
+            points[k, ..., 2] = r * np.sin(th)
 
     return points.reshape(-1, 3)
 
@@ -91,7 +97,8 @@ def mesh_to_vtk_cells(mesh: Mesh) -> tuple[np.ndarray, np.ndarray]:
                         p6 = _node_id(k_next, e, j + 1, i + 1)
                         p7 = _node_id(k_next, e, j + 1, i)
 
-                    cell_list.append([8, p0, p1, p2, p3, p4, p5, p6, p7])
+                        cell_list.append([8, p0, p1, p2, p3, p4, p5, p6, p7])
+
         if len(cell_list) == ncells:
             cells = np.array(cell_list).ravel()
         else:
@@ -123,3 +130,14 @@ def semtex_to_unstructured_grid(mesh: Mesh, fieldfile: Fieldfile) -> pv.Unstruct
         grid.point_data[name] = values
 
     return grid
+
+
+def write_vtu(grid: pv.UnstructuredGrid, filename: str | Path):
+    """Write PyVista unstructured grid to a VTU file"""
+    filename = Path(filename)
+
+    if filename.suffix != ".vtu":
+        filename = filename.with_suffix(".vtu")
+    filename.parent.mkdir(parents=True, exist_ok=True)
+
+    grid.save(filename)
