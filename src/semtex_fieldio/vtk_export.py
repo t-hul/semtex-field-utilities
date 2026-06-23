@@ -143,7 +143,7 @@ def write_vtu(grid: pv.UnstructuredGrid, filename: str | Path):
     grid.save(filename)
 
 
-def mesh_to_structured_block(mesh: Mesh, element_id: int) -> pv.StructuredGrid:
+def mesh_to_structured_block(mesh: Mesh, element_id: int, like_tec: bool = False) -> pv.StructuredGrid:
     """Convert Semtex mesh points to VTK Cartesian points of a given element
     and create a structured grid of the element x nz planes.
     """
@@ -168,15 +168,31 @@ def mesh_to_structured_block(mesh: Mesh, element_id: int) -> pv.StructuredGrid:
             points[k, ..., 1] = r * np.cos(th)
             points[k, ..., 2] = r * np.sin(th)
 
-    return pv.StructuredGrid(points[:, 0], points[:, 1], points[:, 2])
+    return pv.StructuredGrid(points[..., 0], points[..., 1], points[..., 2])
 
 
 def field_to_block_point_data(fieldfile: Fieldfile, element_id: int):
-    ...
+    """Return field arrays for a given element aligned with mesh_to_structured_block ordering."""
+    block_data = fieldfile.read_element(element_id)
+    return fieldfile.get_data_dict(block_data)
 
 
 def semtex_to_multiblock(mesh: Mesh, fieldfile: Fieldfile) -> pv.MultiBlock:
-    ...
+    blocks = pv.MultiBlock()
+    nel = fieldfile.geometry.nel
+    for e in range(nel):
+        block = mesh_to_structured_block(mesh, e)
+
+        for name, values in field_to_block_point_data(fieldfile, e).items():
+            if values.shape[0] != block.n_points:
+                raise ValueError(
+                    f"Field {name} of element {e} has {values.shape[0]} values, "
+                    f"but block has {block.n_points} points.")
+            block.point_data[name] = values
+
+        blocks.append(block)
+
+    return blocks
 
 
 def write_vtm(blocks: pv.MultiBlock, filename: str | Path):
