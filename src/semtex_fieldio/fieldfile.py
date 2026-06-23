@@ -172,7 +172,7 @@ class Fieldfile:
         return np.stack(result)  # shape: (nfields, ntot_z)
 
     def read_element(
-        self, element_id: int, field_names: Optional[list[str]] = None
+            self, element_id: int, field_names: Optional[list[str]] = None, wrap_z: bool = False
     ) -> np.ndarray:
         """Read a specific element for all or selected fields."""
         if field_names is None:
@@ -194,11 +194,19 @@ class Fieldfile:
                         f.seek(offset + hdr_off)
                         buf = f.read(ntot_el * 8)
                         result.append(np.frombuffer(buf, dtype=np.float64))
+                    if wrap_z:
+                        result.append(result[-nz])
 
+            if wrap_z:
+                nz += 1
             return np.stack(result).reshape(nfields, nz * ntot_el)
         
         print("Reshaping loaded data")
-        return self.reshape_elementwise()[:, :, element_id, :, :].reshape(nfields, nz * ntot_el)
+        result = self.reshape_elementwise()[:, :, element_id, :, :]
+        if wrap_z:
+            result = np.append(result, result[:, [0], :, :], axis=1)
+            nz += 1
+        return result.reshape(nfields, nz * ntot_el)
 
     def get_data_dict(
             self, data: np.ndarray, field_names: Optional[list[str]] = None,
