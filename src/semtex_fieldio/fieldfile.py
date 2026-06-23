@@ -63,16 +63,19 @@ class Fieldfile:
         logger.debug(f"npoints: {self.npoints}")
         logger.debug(f"ntotf: {self.ntotf}")
 
-    def _offset(self, field_idx: int = 0, z_idx: int = 0) -> int:
-        """Byte offset for a specific field and z-plane."""
+    def _offset(self, field_idx: int = 0, z_idx: int = 0, el_idx: int = 0) -> int:
+        """Byte offset for a specific field, z-plane and element."""
         nz = self.geometry.nz
         nel = self.geometry.nel
         ns = self.geometry.ns
         nr = self.geometry.nr
-        ntot_z = nel * ns * nr
+        ntot_el = ns * nr
+        ntot_z = nel * ntot_el
+        if el_idx >= nel:
+            raise ValueError(f"el_idx {el_idx} exceeds number of elements {nel}")
         if z_idx >= nz:
             raise ValueError(f"z_idx {z_idx} exceeds number of planes {nz}")
-        return (field_idx * self.npoints + z_idx * ntot_z) * 8  # bytes
+        return (field_idx * self.npoints + z_idx * ntot_z + el_idx * ntot_el) * 8  # bytes
 
     def _skip_header(self, f: BinaryIO) -> int:
         for _ in range(10):
@@ -168,18 +171,39 @@ class Fieldfile:
 
         return np.stack(result)  # shape: (nfields, ntot_z)
 
+    def read_element(
+        self, element_id: int, field_names: Optional[list[str]] = None
+    ) -> np.ndarray:
+        """Read a specific element for all or selected fields."""
+        if field_names is None:
+            field_names = self.fields
+        nfields = len(field_names)
+
+        nz = self.geometry.nz
+        ntot_el = self.geometry.ns * self.geometry.nr
+        result = []
+
+        with self.fname.open("rb") as f:
+            hdr_off = self._skip_header(f)
+
+            for name in field_names:
+                idx = self.field_index(name)
+                for k in range(nz):
+                    offset = self._offset(field_idx=idx, z_idx=k, el_idx=element_id)
+                    f.seek(offset + hdr_off)
+                    buf = f.read(ntot_el * 8)
+                    result.append(np.frombuffer(buf, dtype=np.float64))
+
+        return np.stack(result).reshape(nfields, nz * ntot_el)
+
     def get_data_dict(
-        self, data: np.ndarray, field_names: Optional[list[str]] = None
+            self, data: np.ndarray, field_names: Optional[list[str]] = None,
     ) -> dict[np.ndarray]:
         if field_names is None:
             field_names = self.fields
         if data.shape[0] != len(field_names):
             raise ValueError(
                 f"Number of field names ({len(field_names)}) not equal to data.shape[0] ({data.shape[0]})"
-            )
-        if data.shape[1] != self.npoints:
-            raise ValueError(
-                f"Data fields have {data.shape[1]} values, expected {self.npoints}"
             )
 
         data_dict = {}
