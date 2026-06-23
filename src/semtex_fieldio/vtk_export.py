@@ -168,27 +168,37 @@ def mesh_to_structured_block(mesh: Mesh, element_id: int, like_tec: bool = False
             points[k, ..., 1] = r * np.cos(th)
             points[k, ..., 2] = r * np.sin(th)
 
+    points = points.transpose(2, 1, 0, 3)
     return pv.StructuredGrid(points[..., 0], points[..., 1], points[..., 2])
 
 
 def field_to_block_point_data(fieldfile: Fieldfile, element_id: int):
     """Return field arrays for a given element aligned with mesh_to_structured_block ordering."""
     block_data = fieldfile.read_element(element_id)
+    print(block_data.shape)
     return fieldfile.get_data_dict(block_data)
 
 
-def semtex_to_multiblock(mesh: Mesh, fieldfile: Fieldfile) -> pv.MultiBlock:
+def semtex_to_multiblock(mesh: Mesh, fieldfile: Fieldfile, like_tec: bool = False) -> pv.MultiBlock:
+    geo = mesh.geometry
+    nr = geo.nr
+    ns = geo.ns
+    nz = geo.nz
+    nel = geo.nel
+
     blocks = pv.MultiBlock()
-    nel = fieldfile.geometry.nel
+
     for e in range(nel):
-        block = mesh_to_structured_block(mesh, e)
+        block = mesh_to_structured_block(mesh, e, like_tec)
+        # block.dimensions = (nz, ns, nr)
+        print(block.dimensions)
 
         for name, values in field_to_block_point_data(fieldfile, e).items():
             if values.shape[0] != block.n_points:
                 raise ValueError(
                     f"Field {name} of element {e} has {values.shape[0]} values, "
                     f"but block has {block.n_points} points.")
-            block.point_data[name] = values
+            block.point_data[name] = values  # .reshape(nz, ns, nr).transpose(0, 2, 1).flatten()
 
         blocks.append(block)
 
