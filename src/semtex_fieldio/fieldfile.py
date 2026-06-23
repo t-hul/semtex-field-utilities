@@ -183,18 +183,22 @@ class Fieldfile:
         ntot_el = self.geometry.ns * self.geometry.nr
         result = []
 
-        with self.fname.open("rb") as f:
-            hdr_off = self._skip_header(f)
+        if self.data is None:
+            with self.fname.open("rb") as f:
+                hdr_off = self._skip_header(f)
 
-            for name in field_names:
-                idx = self.field_index(name)
-                for k in range(nz):
-                    offset = self._offset(field_idx=idx, z_idx=k, el_idx=element_id)
-                    f.seek(offset + hdr_off)
-                    buf = f.read(ntot_el * 8)
-                    result.append(np.frombuffer(buf, dtype=np.float64))
+                for name in field_names:
+                    idx = self.field_index(name)
+                    for k in range(nz):
+                        offset = self._offset(field_idx=idx, z_idx=k, el_idx=element_id)
+                        f.seek(offset + hdr_off)
+                        buf = f.read(ntot_el * 8)
+                        result.append(np.frombuffer(buf, dtype=np.float64))
 
-        return np.stack(result).reshape(nfields, nz * ntot_el)
+            return np.stack(result).reshape(nfields, nz * ntot_el)
+        
+        print("Reshaping loaded data")
+        return self.reshape_elementwise()[:, :, element_id, :, :].reshape(nfields, nz * ntot_el)
 
     def get_data_dict(
             self, data: np.ndarray, field_names: Optional[list[str]] = None,

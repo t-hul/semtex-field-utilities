@@ -16,5 +16,6 @@ fieldfile = Fieldfile(data_path, "r")
 # write_vtu(vtk_file, "../../tests/tmp/koal1.1200.vtu")
 
 # Multiblock test
-vtm_file = semtex_to_multiblock(mesh, fieldfile)
+fieldfile.read_all_data()
+vtm_file = semtex_to_multiblock(mesh, fieldfile, like_tec=True)
 write_vtm(vtm_file, "../../tests/tmp/koal1.1200.vtm")
