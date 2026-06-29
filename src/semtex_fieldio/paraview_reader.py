@@ -55,6 +55,7 @@ def make_structured_block(x, y, z, point_data):
     """Create a pure VTK StructuredGrid from coordinate arrays.
 
     x, y, z must have shape (nr, ns, nz).
+    vtkStructuredGrid expects points raveled in F-order, where nr changes fastest and nz changes slowest.
     """
     if x.shape != y.shape or x.shape != z.shape:
         raise ValueError("x, y, z must have identical shapes.")
@@ -97,8 +98,8 @@ def semtex_to_vtk_multiblock(mesh, fieldfile):
     multiblock.SetNumberOfBlocks(mesh.geometry.nel)
 
     for element_id in range(mesh.geometry.nel):
-        x, y, z = mesh_to_block_arrays(mesh, element_id)
-        point_data = field_to_block_point_data(fieldfile, element_id)
+        x, y, z = mesh_to_block_arrays(mesh, element_id, wrap_z=True)
+        point_data = field_to_block_point_data(fieldfile, element_id, wrap_z=True)
 
         block = make_structured_block(x, y, z, point_data)
 
