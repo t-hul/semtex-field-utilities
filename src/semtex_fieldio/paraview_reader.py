@@ -54,22 +54,22 @@ class SemtexFieldReader(VTKPythonAlgorithmBase):
 def make_structured_block(x, y, z, point_data):
     """Create a pure VTK StructuredGrid from coordinate arrays.
 
-    x, y, z must have shape (nr, ns, nz).
-    vtkStructuredGrid expects points raveled in F-order, where nr changes fastest and nz changes slowest.
+    x, y, z must have shape (nz, ns, nr), which than flattend (nr changes fastest).
+    vtkStructuredGrid expects the set dimensions in opposite order (first changes fastest).
     """
     if x.shape != y.shape or x.shape != z.shape:
         raise ValueError("x, y, z must have identical shapes.")
 
-    nr, ns, nz = x.shape
+    nz, ns, nr = x.shape
 
     grid = vtkStructuredGrid()
     grid.SetDimensions(nr, ns, nz)
 
     points_np = np.column_stack(
         [
-            x.ravel(order="F"),
-            y.ravel(order="F"),
-            z.ravel(order="F"),
+            x.ravel(order="C"),
+            y.ravel(order="C"),
+            z.ravel(order="C"),
         ]
     )
 

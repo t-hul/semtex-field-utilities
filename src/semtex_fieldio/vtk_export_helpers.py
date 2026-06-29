@@ -8,9 +8,10 @@ from .fieldfile import Fieldfile
 
 
 def mesh_to_block_arrays(mesh: Mesh, element_id: int, like_tec: bool = False, wrap_z: bool = False) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Convert Semtex mesh points to VTK Cartesian points of a given element.
-    
-    Return points in transposed order nr, ns, nz instead of Semtex-natural nz, ns ,nr
+    """Return coordinate arrays for one VTK StructuredGrid block.
+
+    The Semtex element coordinates are built in natural Semtex order
+    (nz, ns, nr).
     """
     xy = mesh.xy
     if wrap_z:
@@ -36,7 +37,7 @@ def mesh_to_block_arrays(mesh: Mesh, element_id: int, like_tec: bool = False, wr
             points[k, ..., 1] = r * np.cos(th)
             points[k, ..., 2] = r * np.sin(th)
 
-    points = points.transpose(2, 1, 0, 3)
+    # points = points.transpose(2, 1, 0, 3)
     return points[..., 0], points[..., 1], points[..., 2]
 
 
