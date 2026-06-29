@@ -37,7 +37,6 @@ def mesh_to_block_arrays(mesh: Mesh, element_id: int, like_tec: bool = False, wr
             points[k, ..., 1] = r * np.cos(th)
             points[k, ..., 2] = r * np.sin(th)
 
-    # points = points.transpose(2, 1, 0, 3)
     return points[..., 0], points[..., 1], points[..., 2]
 
 
