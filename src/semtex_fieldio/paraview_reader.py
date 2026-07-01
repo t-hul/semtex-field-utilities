@@ -4,6 +4,7 @@ from vtkmodules.util.vtkAlgorithm import VTKPythonAlgorithmBase
 from vtkmodules.vtkCommonDataModel import vtkMultiBlockDataSet, vtkStructuredGrid
 from vtkmodules.vtkCommonCore import vtkPoints
 from vtkmodules.util.numpy_support import numpy_to_vtk
+from pathlib import Path
 
 
 from semtex_fieldio.mesh import Mesh
@@ -26,6 +27,7 @@ class SemtexFieldReader(VTKPythonAlgorithmBase):
         )
         self._filename = None
         self._mesh_filename = None
+        self._wrap_z = True
 
     @smproperty.stringvector(name="FileName")
     @smdomain.filelist()
@@ -33,19 +35,31 @@ class SemtexFieldReader(VTKPythonAlgorithmBase):
         self._filename = filename
         self.Modified()
 
-    @smproperty.stringvector(name="MeshFileName")
-    @smdomain.filelist()
-    def SetMeshFileName(self, filename):
-        self._mesh_filename = filename
+    @smproperty.intvector(name="WrapZ", default_values=1)
+    @smdomain.xml("""
+                  <BooleanDomain name="bool" />
+                  """)
+    def SetWrapZ(self, value):
+        self._wrap_z = bool(value)
         self.Modified()
+
+    # @smproperty.stringvector(name="MeshFileName")
+    # @smdomain.filelist()
+    # def SetMeshFileName(self, filename):
+    #     self._mesh_filename = filename
+    #     self.Modified()
+    #
 
     def RequestData(self, request, inInfo, outInfo):
         output = vtkMultiBlockDataSet.GetData(outInfo, 0)
 
-        mesh = Mesh.from_file(self._mesh_filename)
+        mesh_filename = self._mesh_filename
+        if mesh_filename is None or mesh_filename == "None":
+            mesh_filename = detect_mesh_file(self._filename)
+        mesh = Mesh.from_file(mesh_filename)
         fieldfile = Fieldfile(self._filename, "r")
 
-        blocks = semtex_to_vtk_multiblock(mesh, fieldfile)
+        blocks = semtex_to_vtk_multiblock(mesh, fieldfile, self._wrap_z)
 
         output.ShallowCopy(blocks)
         return 1
@@ -93,13 +107,13 @@ def make_structured_block(x, y, z, point_data):
     return grid
 
 
-def semtex_to_vtk_multiblock(mesh, fieldfile):
+def semtex_to_vtk_multiblock(mesh, fieldfile, wrap_z):
     multiblock = vtkMultiBlockDataSet()
     multiblock.SetNumberOfBlocks(mesh.geometry.nel)
 
     for element_id in range(mesh.geometry.nel):
-        x, y, z = mesh_to_block_arrays(mesh, element_id, wrap_z=True)
-        point_data = field_to_block_point_data(fieldfile, element_id, wrap_z=True)
+        x, y, z = mesh_to_block_arrays(mesh, element_id, wrap_z=wrap_z)
+        point_data = field_to_block_point_data(fieldfile, element_id, wrap_z=wrap_z)
 
         block = make_structured_block(x, y, z, point_data)
 
@@ -110,3 +124,15 @@ def semtex_to_vtk_multiblock(mesh, fieldfile):
         )
 
     return multiblock
+
+
+def detect_mesh_file(field_name: str | Path) -> Path | None:
+    field_path = Path(field_name)
+    session_name = field_path.stem.split('.')[0]
+    mesh_path = field_path.with_name(f"{session_name}.msh")
+    if not mesh_path.exists():
+        raise FileNotFoundError(
+            f"Could not find mesh file '{mesh_path.name}'"
+            f"for field file '{field_path.name}'"
+        )
+    return mesh_path
