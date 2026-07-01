@@ -17,6 +17,7 @@ from semtex_fieldio.vtk_export_helpers import mesh_to_block_arrays, field_to_blo
     label="Semtex Field Reader",
     extensions=["fld", "chk"],
     file_description="Semtex field files",
+    support_reload=True,
 )
 class SemtexFieldReader(VTKPythonAlgorithmBase):
     def __init__(self):
@@ -25,15 +26,31 @@ class SemtexFieldReader(VTKPythonAlgorithmBase):
             nOutputPorts=1,
             outputType="vtkMultiBlockDataSet",
         )
-        self._filename = None
+        self._filenames = []
+        self._timesteps = []
         self._mesh_filename = None
         self._wrap_z = True
 
-    @smproperty.stringvector(name="FileName")
+    # @smproperty.stringvector(name="FileName")
+    # @smdomain.filelist()
+    # def SetFileName(self, filename):
+    #     self.SetFileNames([filename])
+    #
+    @smproperty.stringvector(
+        name="FileNames",
+        number_of_elements="0",
+        repeat_command="1",
+        clean_command="ClearFileNames",
+    )
     @smdomain.filelist()
-    def SetFileName(self, filename):
-        self._filename = filename
+    def AddFileName(self, filename):
+        print("AddFileName called with ", filename)
+        self._filenames.append(Path(filename))
+        self._timesteps = [extract_timestep(f) for f in self._filenames]
         self.Modified()
+
+    def ClearFileNames(self):
+        self._filenames = []
 
     @smproperty.intvector(name="WrapZ", default_values=1)
     @smdomain.xml("""
@@ -43,26 +60,59 @@ class SemtexFieldReader(VTKPythonAlgorithmBase):
         self._wrap_z = bool(value)
         self.Modified()
 
-    # @smproperty.stringvector(name="MeshFileName")
-    # @smdomain.filelist()
-    # def SetMeshFileName(self, filename):
-    #     self._mesh_filename = filename
-    #     self.Modified()
-    #
+    @smproperty.doublevector(name="TimestepValues", information_only="1", si_class="vtkSITimeStepsProperty")
+    def GetTimestepValues(self):
+        return self._timesteps
 
-    def RequestData(self, request, inInfo, outInfo):
-        output = vtkMultiBlockDataSet.GetData(outInfo, 0)
+    def RequestInformation(self, request, inInfoVec, outInfoVec):
+        executive = self.GetExecutive()
+        out_info = outInfoVec.GetInformationObject(0)
+
+        if self._timesteps:
+            out_info.Set(
+                executive.TIME_STEPS(),
+                self._timesteps,
+                len(self._timesteps),
+            )
+            out_info.Set(
+                executive.TIME_RANGE(),
+                [self._timesteps[0], self._timesteps[-1]],
+                2,
+            )
+        return 1
+
+    def RequestData(self, request, inInfoVec, outInfoVec):
+        output = vtkMultiBlockDataSet.GetData(outInfoVec, 0)
+
+        field_filename, timestep = self._get_requested_file_and_time(
+            outInfoVec.GetInformationObject(0))
 
         mesh_filename = self._mesh_filename
         if mesh_filename is None or mesh_filename == "None":
-            mesh_filename = detect_mesh_file(self._filename)
+            mesh_filename = detect_mesh_file(self._filenames[0])
         mesh = Mesh.from_file(mesh_filename)
-        fieldfile = Fieldfile(self._filename, "r")
+        fieldfile = Fieldfile(field_filename, "r")
 
         blocks = semtex_to_vtk_multiblock(mesh, fieldfile, self._wrap_z)
 
         output.ShallowCopy(blocks)
+
+        output.GetInformation().Set(
+            output.DATA_TIME_STEP(),
+            timestep,
+        )
         return 1
+
+    def _get_requested_file_and_time(self, outInfo):
+        executive = self.GetExecutive()
+
+        requested_time = None
+        if outInfo.Has(executive.UPDATE_TIME_STEP()):
+            requested_time = outInfo.Get(executive.UPDATE_TIME_STEP())
+        idx = min(range(len(self._timesteps)),
+                  key=lambda i: abs(self._timesteps[i] - requested_time),
+                  )
+        return self._filenames[idx], self._timesteps[idx]
 
 
 def make_structured_block(x, y, z, point_data):
@@ -136,3 +186,10 @@ def detect_mesh_file(field_name: str | Path) -> Path | None:
             f"for field file '{field_path.name}'"
         )
     return mesh_path
+
+
+def extract_timestep(path):
+    stem_parts = Path(path).stem.split('.')
+    if len(stem_parts) >= 2 and stem_parts[-1].isdigit():
+        return float(stem_parts[-1])
+    return 0.0
